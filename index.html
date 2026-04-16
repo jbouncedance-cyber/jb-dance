@@ -228,8 +228,14 @@ textarea{resize:vertical;min-height:80px}
 
   async function saveStudent(student) {
     try {
+      window._studentSaving = true;
       await setDoc(doc(STUDENTS_COL, String(student.id)), student);
-    } catch(e) { console.warn('student 저장 실패:', e); }
+      // 2초 후 플래그 해제
+      setTimeout(() => { window._studentSaving = false; }, 2000);
+    } catch(e) {
+      window._studentSaving = false;
+      console.warn('student 저장 실패:', e);
+    }
   }
 
   async function deleteStudent(id) {
@@ -331,17 +337,39 @@ textarea{resize:vertical;min-height:80px}
     });
 
     // 학생 컬렉션 변경 감지
+    let syncTimeout = null;
     onSnapshot(STUDENTS_COL, (snap) => {
-      window.DB.students = [];
-      snap.forEach(d => window.DB.students.push(d.data()));
+      // 저장 직후면 무시 (내가 방금 저장한 거)
+      if (window._studentSaving) {
+        console.log('🔄 내 저장 중 - 동기화 스킵');
+        return;
+      }
+      // 프로필 페이지 열려있으면 해당 학생만 업데이트
+      const profileActive = document.getElementById('page-profile')?.classList.contains('active');
+      
+      // 변경된 학생만 업데이트 (전체 덮어쓰기 방지)
+      snap.docChanges().forEach(change => {
+        const changedStudent = change.doc.data();
+        if (change.type === 'removed') {
+          window.DB.students = window.DB.students.filter(s => s.id != changedStudent.id);
+        } else {
+          // 현재 편집 중인 학생이면 스킵
+          if (profileActive && window.curSid == changedStudent.id) {
+            console.log('🔄 현재 편집 중인 학생 동기화 스킵');
+            return;
+          }
+          const idx = window.DB.students.findIndex(s => s.id == changedStudent.id);
+          if (idx >= 0) window.DB.students[idx] = changedStudent;
+          else window.DB.students.push(changedStudent);
+        }
+      });
       window.DB.students.sort((a,b) => a.name.localeCompare(b.name, 'ko'));
       DB = window.DB;
-      // 프로필 페이지 열려있으면 메인만 업데이트 (입력 중 방해 안 함)
-      const profileActive = document.getElementById('page-profile')?.classList.contains('active');
-      if (!profileActive && window.renderMain) window.renderMain();
-      else if (profileActive) {
-        // 명단만 백그라운드 업데이트 (화면은 그대로)
-        console.log('🔄 학생 동기화 (프로필 페이지 열림 - 화면 유지)');
+      
+      if (!profileActive && window.renderMain) {
+        // 디바운스: 연속 변경 시 마지막 것만 렌더
+        clearTimeout(syncTimeout);
+        syncTimeout = setTimeout(() => window.renderMain(), 500);
       }
     });
 
