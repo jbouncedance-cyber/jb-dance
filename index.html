@@ -244,11 +244,18 @@ textarea{resize:vertical;min-height:80px}
         await saveToFirestore();
         console.log('✅ 초기 데이터 Firebase에 저장');
       }
-    } catch(e) { console.warn('Firebase 로드 실패:', e); }
-    // DB 변수 동기화 (메인 스크립트의 DB와 window.DB 일치)
+    } catch(e) {
+      console.warn('Firebase 로드 실패:', e);
+      const ov = document.getElementById('loading-overlay');
+      if (ov) ov.remove();
+    }
+    // DB 변수 동기화
     DB = window.DB;
-    // 항상 화면 갱신
+    // 화면 갱신
     if (window.renderMain) window.renderMain();
+    // 로딩 오버레이 숨기기
+    const ov = document.getElementById('loading-overlay');
+    if (ov) { ov.style.opacity='0'; ov.style.transition='opacity .3s'; setTimeout(()=>ov.remove(), 300); }
   }
 
   // 실시간 동기화
@@ -291,6 +298,14 @@ textarea{resize:vertical;min-height:80px}
 
 </head>
 <body>
+
+<!-- 로딩 오버레이 -->
+<div id="loading-overlay" style="position:fixed;inset:0;background:#fff;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
+  <div style="font-size:28px;font-weight:900;color:#D4006A;letter-spacing:-1px">JB DANCE</div>
+  <div style="font-size:13px;color:#888">입시반 관리 시스템</div>
+  <div style="width:36px;height:36px;border:3px solid #fbb6d8;border-top-color:#D4006A;border-radius:50%;animation:spin .8s linear infinite"></div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 
 <!-- ===== MAIN ===== -->
 <div id="page-main" class="page active">
