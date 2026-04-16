@@ -1038,8 +1038,9 @@ function getStudentClasses(s){
 function renderStudentList(){
   const w=document.getElementById('student-list-wrap');
   if(!DB.students.length){w.innerHTML='<div class="empty-msg">등록된 학생이 없습니다</div>';return;}
+  const sorted=[...DB.students].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
   w.innerHTML=`<div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:7px;padding:0 2px">🎓 입시반 명단 · ${DB.students.length}명</div>
-  ${DB.students.map((s,i)=>{
+  ${sorted.map((s,i)=>{
     const hasReq=DB.requests.some(r=>r.studentId===s.id&&!r.read);
     const lastIb=s.inbody&&s.inbody.length?s.inbody[s.inbody.length-1]:null;
     const {reg,train,pickup}=getStudentClasses(s);
