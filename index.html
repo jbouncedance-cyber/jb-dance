@@ -231,7 +231,7 @@ textarea{resize:vertical;min-height:80px}
       window._studentSaving = true;
       await setDoc(doc(STUDENTS_COL, String(student.id)), student);
       // 2초 후 플래그 해제
-      setTimeout(() => { window._studentSaving = false; }, 2000);
+      setTimeout(() => { window._studentSaving = false; }, 5000);
     } catch(e) {
       window._studentSaving = false;
       console.warn('student 저장 실패:', e);
@@ -1694,11 +1694,22 @@ function pickCls(id,el){
   document.querySelectorAll('#modal-cls-body .cls-opt').forEach(o=>{o.classList.remove('selected');o.querySelector('.chk').textContent='';});
   el.classList.add('selected');el.querySelector('.chk').textContent='✓';
 }
+let _saveStudentTimer=null;
 function saveClsSel(){
   const s=DB.students.find(x=>x.id===curSid);
   if(!s.classes)s.classes={};
   s.classes[curSlotKey]=selClsId;
-  save('student',s.id);closeM('modal-cls');renderProfile(s);renderStudentList(); // 즉시 반영
+  closeM('modal-cls');renderProfile(s);renderStudentList();
+  // 디바운스: 3초 안에 여러 수업 선택해도 마지막 것만 Firebase 저장
+  clearTimeout(_saveStudentTimer);
+  _saveStudentTimer=setTimeout(()=>{
+    const latest=DB.students.find(x=>x.id===curSid);
+    if(latest){
+      window._studentSaving=true;
+      saveStudent(latest);
+      console.log('✅ 수업 일괄 저장:', latest.name, Object.keys(latest.classes||{}).length+'개');
+    }
+  },2000);
 }
 
 // ═══════════════════════════════════════════
