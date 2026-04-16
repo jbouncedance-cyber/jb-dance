@@ -878,7 +878,7 @@ function save(type, studentId){
   // type에 따라 해당 데이터만 Firebase에 저장
   if(type==='student' && studentId){
     const s=window.DB.students.find(x=>x.id===studentId);
-    if(s && window.fbSaveStudent) window.fbSaveStudent(s);
+    if(s && window.fb) window.fb.saveStudent(s);
   } else if(type==='message'){
     if(window.fbSaveMessages) window.fbSaveMessages();
   } else {
@@ -903,6 +903,10 @@ const DAYS=['월','화','수','목','금','토','일'];
 // ═══════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════
+function saveConfig(){ if(window.fb) window.fb.saveConfig(); }
+function saveStudent(s){ if(window.fb&&s) window.fb.saveStudent(s); }
+function fbDeleteStudent(id){ if(window.fb) window.fb.deleteStudent(id); }
+
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -1704,8 +1708,8 @@ function saveClsSel(){
   clearTimeout(_saveStudentTimer);
   _saveStudentTimer=setTimeout(()=>{
     const latest=DB.students.find(x=>x.id===curSid);
-    if(latest){
-      saveStudent(latest);
+    if(latest && window.fb){
+      window.fb.saveStudent(latest);
       console.log('✅ 수업 일괄 저장:', latest.name, Object.keys(latest.classes||{}).length+'개');
     }
   },1500);
