@@ -149,6 +149,26 @@ textarea{resize:vertical;min-height:80px}
 .pickup-hist-item{padding:8px 11px;border-radius:9px;background:var(--teal-bg);border:1px solid var(--teal-bd);margin-bottom:5px;font-size:13px}
 /* notice */
 .notice-content{font-size:15px;line-height:1.8;color:var(--black);white-space:pre-wrap}
+.postit-wrap{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:10px;padding:4px 2px 10px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.postit-wrap::-webkit-scrollbar{display:none}
+.postit{flex-shrink:0;width:150px;min-height:130px;border-radius:3px;padding:12px 11px 10px;position:relative;box-shadow:2px 3px 8px rgba(0,0,0,.13),0 1px 2px rgba(0,0,0,.08);display:flex;flex-direction:column;cursor:pointer;transition:transform .15s}
+.postit:hover{transform:rotate(0deg) scale(1.03)}
+.postit::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:rgba(0,0,0,.08);border-radius:3px 3px 0 0}
+.postit-author{font-size:11px;font-weight:800;margin-bottom:6px;opacity:.8}
+.postit-content{font-size:12px;line-height:1.5;flex:1;word-break:break-all}
+.postit-footer{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.postit-time{font-size:10px;opacity:.6}
+.postit-reply-cnt{font-size:10px;font-weight:700;opacity:.75}
+.postit-colors{background:#fef08a}
+.postit-colors:nth-child(2n){background:#bbf7d0}
+.postit-colors:nth-child(3n){background:#bfdbfe}
+.postit-colors:nth-child(4n){background:#fecdd3}
+.postit-colors:nth-child(5n){background:#e9d5ff}
+.postit-colors:nth-child(6n){background:#fed7aa}
+.reply-item{padding:8px 12px;background:var(--light);border-radius:8px;margin-bottom:5px;display:flex;gap:8px;align-items:flex-start}
+.reply-author{font-size:12px;font-weight:800;flex-shrink:0}
+.reply-content{font-size:12px;color:var(--black);line-height:1.5;flex:1}
+.reply-time{font-size:10px;color:var(--gray2);flex-shrink:0}
 .img-upload-btn{display:block;width:100%;padding:10px;border:1.5px dashed var(--gray2);border-radius:9px;text-align:center;font-size:13px;color:var(--gray);cursor:pointer;background:var(--light);font-family:inherit;margin-bottom:3px}
 .img-preview{width:100%;border-radius:9px;border:1px solid var(--border);margin-top:5px;display:none}
 /* section title */
@@ -487,23 +507,76 @@ textarea{resize:vertical;min-height:80px}
     </div>
     <div class="modal-body">
       <div class="form-row">
+        <label class="form-label">누구세요?</label>
+        <select id="msg-role" onchange="updateMsgAuthorUI()">
+          <option value="student">학생</option>
+          <option value="teacher">선생님 (관리자)</option>
+        </select>
+      </div>
+      <div id="msg-student-row" class="form-row">
         <label class="form-label">이름 선택</label>
         <select id="msg-author">
           <option value="">— 이름 선택 —</option>
         </select>
       </div>
+      <div id="msg-teacher-row" class="form-row" style="display:none">
+        <label class="form-label">선생님 이름</label>
+        <input type="text" id="msg-teacher-name" placeholder="이름 입력">
+      </div>
       <div class="form-row">
-        <label class="form-label">비밀번호 (4자리)</label>
-        <input type="password" id="msg-pw" placeholder="본인 비밀번호" maxlength="4">
+        <label class="form-label">비밀번호</label>
+        <input type="password" id="msg-pw" placeholder="비밀번호 입력" maxlength="20">
       </div>
       <div class="form-row">
         <label class="form-label">내용</label>
-        <textarea id="msg-content" placeholder="예: 오늘 7시 연습할 사람~&#10;대회 같이 갈 사람 구해요!&#10;배틀 나갈 사람?" style="min-height:100px"></textarea>
+        <textarea id="msg-content" placeholder="예: 오늘 7시 연습할 사람~&#10;대회 같이 갈 사람 구해요!" style="min-height:100px"></textarea>
       </div>
       <div class="error-msg" id="msg-err"></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-pink" onclick="submitMsg()">올리기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reply modal -->
+<div class="modal-overlay" id="modal-reply" onclick="if(event.target===this)closeM('modal-reply')">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">💬 댓글 달기</div>
+      <button class="close-btn" onclick="closeM('modal-reply')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="reply-orig" style="background:var(--light);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:var(--gray);line-height:1.5"></div>
+      <div class="form-row">
+        <label class="form-label">누구세요?</label>
+        <select id="reply-role" onchange="updateReplyAuthorUI()">
+          <option value="student">학생</option>
+          <option value="teacher">선생님 (관리자)</option>
+        </select>
+      </div>
+      <div id="reply-student-row" class="form-row">
+        <label class="form-label">이름 선택</label>
+        <select id="reply-author">
+          <option value="">— 이름 선택 —</option>
+        </select>
+      </div>
+      <div id="reply-teacher-row" class="form-row" style="display:none">
+        <label class="form-label">선생님 이름</label>
+        <input type="text" id="reply-teacher-name" placeholder="이름 입력">
+      </div>
+      <div class="form-row">
+        <label class="form-label">비밀번호</label>
+        <input type="password" id="reply-pw" placeholder="비밀번호 입력" maxlength="20">
+      </div>
+      <div class="form-row">
+        <label class="form-label">댓글 내용</label>
+        <textarea id="reply-content" placeholder="댓글을 입력하세요" style="min-height:80px"></textarea>
+      </div>
+      <div class="error-msg" id="reply-err"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-pink" onclick="submitReply()">댓글 달기</button>
     </div>
   </div>
 </div>
@@ -713,65 +786,201 @@ function viewNotice(){document.getElementById('notice-txt').textContent=DB.notic
 // ═══════════════════════════════════════════
 // MESSAGE BOARD
 // ═══════════════════════════════════════════
+const POSTIT_COLORS=['#fef08a','#bbf7d0','#bfdbfe','#fecdd3','#e9d5ff','#fed7aa','#a5f3fc','#fde68a'];
+
 function renderMsgBoard(){
   const w=document.getElementById('message-board-wrap');
   if(!w) return;
   const msgs=(DB.messages||[]).slice().reverse().slice(0,20);
-  w.innerHTML=`<div class="card" style="margin-bottom:10px">
-    <div style="padding:11px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)">
+  w.innerHTML=`<div style="margin-bottom:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:0 2px">
       <div>
-        <div style="font-size:14px;font-weight:800">💬 오늘의 한마디</div>
-        <div style="font-size:11px;color:var(--gray);margin-top:1px">자유롭게 소통해요</div>
+        <div style="font-size:14px;font-weight:800">📌 오늘의 한마디</div>
+        <div style="font-size:11px;color:var(--gray);margin-top:1px">자유롭게 소통해요 · 탭하면 댓글 볼 수 있어요</div>
       </div>
       <button class="sbtn pink" onclick="openMsgModal()">+ 남기기</button>
     </div>
-    ${!msgs.length?`<div class="empty-msg" style="padding:18px;font-size:13px">아직 아무도 안 남겼어요. 첫 한마디를 남겨보세요! 😊</div>`:
-    msgs.map(m=>`
-    <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start">
-      <div style="width:34px;height:34px;border-radius:50%;background:var(--pink-bg);border:2px solid var(--pink2);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--pink);flex-shrink:0">${m.author[0]}</div>
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-          <span style="font-size:13px;font-weight:800">${esc(m.author)}</span>
-          <span style="font-size:11px;color:var(--gray)">${m.time}</span>
-        </div>
-        <div style="font-size:13px;line-height:1.5;color:var(--black)">${esc(m.content).replace(/\n/g,'<br>')}</div>
-      </div>
-      ${isAdmin?`<button onclick="delMsg('${m.id}')" style="background:none;border:none;color:var(--gray2);cursor:pointer;font-size:16px;padding:0;flex-shrink:0">×</button>`:''}
-    </div>`).join('')}
+    ${!msgs.length
+      ?`<div style="background:var(--white);border-radius:12px;border:1px solid var(--border);padding:20px;text-align:center;font-size:13px;color:var(--gray)">첫 한마디를 남겨보세요! 😊</div>`
+      :`<div class="postit-wrap">
+        ${msgs.map((m,i)=>{
+          const col=POSTIT_COLORS[i%POSTIT_COLORS.length];
+          const replies=(m.replies||[]).length;
+          const isTeacher=m.isTeacher;
+          return `<div class="postit" style="background:${col};transform:rotate(${(i%3-1)*1.5}deg)" onclick="openMsgDetail('${m.id}')">
+            <div class="postit-author" style="color:${isTeacher?'var(--pink)':'var(--black)'}">${isTeacher?'👑 ':''}${esc(m.author)}</div>
+            <div class="postit-content">${esc(m.content).replace(/\n/g,'<br>')}</div>
+            <div class="postit-footer">
+              <span class="postit-time">${m.time}</span>
+              ${replies?`<span class="postit-reply-cnt">💬 ${replies}</span>`:''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`
+    }
   </div>`;
 }
 
+// 포스트잇 상세 (댓글 보기)
+let currentMsgId=null;
+function openMsgDetail(id){
+  currentMsgId=id;
+  const m=(DB.messages||[]).find(x=>x.id===id);
+  if(!m) return;
+  const replies=m.replies||[];
+  // 상세 모달 동적 생성
+  let det=document.getElementById('modal-msg-detail');
+  if(!det){
+    det=document.createElement('div');
+    det.id='modal-msg-detail';
+    det.className='modal-overlay';
+    det.onclick=function(e){if(e.target===this)closeM('modal-msg-detail');};
+    document.body.appendChild(det);
+  }
+  const col=POSTIT_COLORS[(DB.messages||[]).indexOf(m)%POSTIT_COLORS.length]||'#fef08a';
+  det.innerHTML=`<div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">📌 ${esc(m.author)}의 한마디</div>
+      <button class="close-btn" onclick="closeM('modal-msg-detail')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:${col};border-radius:12px;padding:14px;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:800;margin-bottom:6px;color:${m.isTeacher?'var(--pink)':'var(--black)'}">${m.isTeacher?'👑 ':''}${esc(m.author)} · ${m.time}</div>
+        <div style="font-size:14px;line-height:1.6">${esc(m.content).replace(/\n/g,'<br>')}</div>
+      </div>
+      <div style="font-size:12px;font-weight:800;color:var(--gray);margin-bottom:8px">💬 댓글 ${replies.length}개</div>
+      <div id="reply-list">
+        ${!replies.length?`<div style="text-align:center;padding:14px;font-size:13px;color:var(--gray)">첫 댓글을 달아보세요!</div>`:
+        replies.map(r=>`<div class="reply-item">
+          <div>
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
+              <span class="reply-author" style="color:${r.isTeacher?'var(--pink)':'var(--black)'}">${r.isTeacher?'👑 ':''}${esc(r.author)}</span>
+              <span class="reply-time">${r.time}</span>
+              ${isAdmin?`<button onclick="delReply('${id}','${r.id}')" style="background:none;border:none;color:var(--gray2);cursor:pointer;font-size:14px;padding:0;margin-left:2px">×</button>`:''}
+            </div>
+            <div class="reply-content">${esc(r.content).replace(/\n/g,'<br>')}</div>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div class="modal-foot" style="display:flex;gap:8px">
+      <button class="btn btn-outline" onclick="closeM('modal-msg-detail')" style="flex:1;padding:11px;font-size:13px">닫기</button>
+      <button class="btn btn-pink" onclick="openReplyModal('${id}')" style="flex:1;padding:11px;font-size:13px">💬 댓글 달기</button>
+      ${isAdmin?`<button class="btn btn-gray" onclick="delMsg('${id}')" style="flex:0 0 auto;padding:11px 14px;font-size:13px">삭제</button>`:''}
+    </div>
+  </div>`;
+  openM('modal-msg-detail');
+}
+
 function openMsgModal(){
+  document.getElementById('msg-role').value='student';
+  updateMsgAuthorUI();
   const sel=document.getElementById('msg-author');
   sel.innerHTML=`<option value="">— 이름 선택 —</option>${DB.students.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}`;
   document.getElementById('msg-pw').value='';
   document.getElementById('msg-content').value='';
   document.getElementById('msg-err').textContent='';
+  if(document.getElementById('msg-teacher-name')) document.getElementById('msg-teacher-name').value='';
   openM('modal-msg');
+}
+function updateMsgAuthorUI(){
+  const isT=document.getElementById('msg-role').value==='teacher';
+  document.getElementById('msg-student-row').style.display=isT?'none':'block';
+  document.getElementById('msg-teacher-row').style.display=isT?'block':'none';
+}
+function updateReplyAuthorUI(){
+  const isT=document.getElementById('reply-role').value==='teacher';
+  document.getElementById('reply-student-row').style.display=isT?'none':'block';
+  document.getElementById('reply-teacher-row').style.display=isT?'block':'none';
 }
 
 function submitMsg(){
-  const sid=document.getElementById('msg-author').value;
+  const role=document.getElementById('msg-role').value;
   const pw=document.getElementById('msg-pw').value;
   const content=document.getElementById('msg-content').value.trim();
   const errEl=document.getElementById('msg-err');
-  if(!sid){errEl.textContent='이름을 선택해주세요';return}
-  if(!pw){errEl.textContent='비밀번호를 입력해주세요';return}
   if(!content){errEl.textContent='내용을 입력해주세요';return}
-  const s=DB.students.find(x=>x.id==sid);
-  if(!s||s.pw!==pw){errEl.textContent='비밀번호가 틀렸습니다';return}
+  let authorName='';let isTeacher=false;
+  if(role==='teacher'){
+    const tname=(document.getElementById('msg-teacher-name').value||'').trim();
+    if(!tname){errEl.textContent='선생님 이름을 입력해주세요';return}
+    if(!pw){errEl.textContent='비밀번호를 입력해주세요';return}
+    if(pw!==DB.adminPw){errEl.textContent='관리자 비밀번호가 틀렸습니다';return}
+    authorName=tname;isTeacher=true;
+  } else {
+    const sid=document.getElementById('msg-author').value;
+    if(!sid){errEl.textContent='이름을 선택해주세요';return}
+    if(!pw){errEl.textContent='비밀번호를 입력해주세요';return}
+    const s=DB.students.find(x=>x.id==sid);
+    if(!s||s.pw!==pw){errEl.textContent='비밀번호가 틀렸습니다';return}
+    authorName=s.name;
+  }
   if(!DB.messages) DB.messages=[];
   const now=new Date();
   const time=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  DB.messages.push({id:'msg'+Date.now(),author:s.name,content,time});
-  // 최대 50개만 유지
+  DB.messages.push({id:'msg'+Date.now(),author:authorName,isTeacher,content,time,replies:[]});
   if(DB.messages.length>50) DB.messages=DB.messages.slice(-50);
   save();closeM('modal-msg');renderMsgBoard();
 }
 
+function openReplyModal(msgId){
+  currentMsgId=msgId;
+  document.getElementById('reply-role').value='student';
+  updateReplyAuthorUI();
+  const sel=document.getElementById('reply-author');
+  sel.innerHTML=`<option value="">— 이름 선택 —</option>${DB.students.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}`;
+  document.getElementById('reply-pw').value='';
+  document.getElementById('reply-content').value='';
+  document.getElementById('reply-err').textContent='';
+  if(document.getElementById('reply-teacher-name')) document.getElementById('reply-teacher-name').value='';
+  // 원글 미리보기
+  const m=(DB.messages||[]).find(x=>x.id===msgId);
+  if(m) document.getElementById('reply-orig').textContent=m.author+': '+m.content;
+  closeM('modal-msg-detail');
+  openM('modal-reply');
+}
+
+function submitReply(){
+  const role=document.getElementById('reply-role').value;
+  const pw=document.getElementById('reply-pw').value;
+  const content=document.getElementById('reply-content').value.trim();
+  const errEl=document.getElementById('reply-err');
+  if(!content){errEl.textContent='내용을 입력해주세요';return}
+  let authorName='';let isTeacher=false;
+  if(role==='teacher'){
+    const tname=(document.getElementById('reply-teacher-name').value||'').trim();
+    if(!tname){errEl.textContent='선생님 이름을 입력해주세요';return}
+    if(!pw){errEl.textContent='비밀번호를 입력해주세요';return}
+    if(pw!==DB.adminPw){errEl.textContent='관리자 비밀번호가 틀렸습니다';return}
+    authorName=tname;isTeacher=true;
+  } else {
+    const sid=document.getElementById('reply-author').value;
+    if(!sid){errEl.textContent='이름을 선택해주세요';return}
+    if(!pw){errEl.textContent='비밀번호를 입력해주세요';return}
+    const s=DB.students.find(x=>x.id==sid);
+    if(!s||s.pw!==pw){errEl.textContent='비밀번호가 틀렸습니다';return}
+    authorName=s.name;
+  }
+  const m=(DB.messages||[]).find(x=>x.id===currentMsgId);
+  if(!m) return;
+  if(!m.replies) m.replies=[];
+  const now=new Date();
+  const time=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  m.replies.push({id:'rep'+Date.now(),author:authorName,isTeacher,content,time});
+  save();closeM('modal-reply');renderMsgBoard();
+  // 댓글 달고 다시 상세 열기
+  setTimeout(()=>openMsgDetail(currentMsgId),100);
+}
+
 function delMsg(id){
   DB.messages=(DB.messages||[]).filter(x=>x.id!==id);
-  save();renderMsgBoard();
+  save();closeM('modal-msg-detail');renderMsgBoard();
+}
+function delReply(msgId,repId){
+  const m=(DB.messages||[]).find(x=>x.id===msgId);
+  if(!m) return;
+  m.replies=(m.replies||[]).filter(x=>x.id!==repId);
+  save();openMsgDetail(msgId);
 }
 
 // ═══════════════════════════════════════════
