@@ -262,60 +262,9 @@ textarea{resize:vertical;min-height:80px}
     } catch(e) { console.warn('request 삭제 실패:', e); }
   }
 
-  // ── 마이그레이션: 기존 maindb → 새 구조로 이전 ──
-  const OLD_REF = doc(db, 'jbdance', 'maindb');
-  async function migrateIfNeeded() {
-    // 이미 마이그레이션 됐으면 스킵
-    const migrated = localStorage.getItem('jbd_migrated_v2');
-    if (migrated) return false;
-
-    try {
-      const oldSnap = await getDoc(OLD_REF);
-      if (!oldSnap.exists()) { localStorage.setItem('jbd_migrated_v2','1'); return false; }
-      const raw = oldSnap.data();
-      if (!raw || !raw.data) { localStorage.setItem('jbd_migrated_v2','1'); return false; }
-
-      const oldDB = JSON.parse(raw.data);
-      console.log('🔄 기존 데이터 마이그레이션 시작...');
-
-      // config 저장
-      await setDoc(CONFIG_REF, {
-        adminPw: oldDB.adminPw || '1234',
-        notice: oldDB.notice || '',
-        notices: oldDB.notices || [],
-        events: oldDB.events || [],
-        updatedAt: Date.now()
-      });
-
-      // 학생 개별 저장
-      for (const s of (oldDB.students || [])) {
-        await setDoc(doc(STUDENTS_COL, String(s.id)), s);
-      }
-
-      // 메시지 개별 저장
-      for (const m of (oldDB.messages || [])) {
-        await setDoc(doc(MESSAGES_COL, String(m.id)), m);
-      }
-
-      // 신청 개별 저장
-      for (const r of (oldDB.requests || [])) {
-        await setDoc(doc(REQUESTS_COL, String(r.id)), r);
-      }
-
-      localStorage.setItem('jbd_migrated_v2','1');
-      console.log('✅ 마이그레이션 완료!');
-      return true;
-    } catch(e) {
-      console.warn('마이그레이션 실패:', e);
-      return false;
-    }
-  }
-
   // ── 전체 로드 ──
   async function loadAll() {
     try {
-      // 마이그레이션 먼저 체크
-      await migrateIfNeeded();
 
       // config 로드
       const configSnap = await getDoc(CONFIG_REF);
@@ -813,7 +762,7 @@ textarea{resize:vertical;min-height:80px}
 // ═══════════════════════════════════════════
 // DATA
 // ═══════════════════════════════════════════
-window.DB = JSON.parse(localStorage.getItem('jbd4')||'null') || {
+window.DB = {
   adminPw:'1234', notice:'',
   students:[
     {id:1,name:'김민지',birth:'2005-03-12',major:'팝핑',pw:'1111',photo:'',classes:{},goals:{monthly:'',dancer:''},inbody:[],pickupHistory:[]},
