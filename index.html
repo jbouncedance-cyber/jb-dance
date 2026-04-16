@@ -190,7 +190,7 @@ textarea{resize:vertical;min-height:80px}
   import {
     getFirestore, doc, collection,
     getDoc, getDocs, setDoc, deleteDoc, updateDoc,
-    onSnapshot, writeBatch
+    onSnapshot, writeBatch, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -228,12 +228,10 @@ textarea{resize:vertical;min-height:80px}
 
   async function saveStudent(student) {
     try {
-      window._studentSaving = true;
-      await setDoc(doc(STUDENTS_COL, String(student.id)), student);
-      // 2초 후 플래그 해제
-      setTimeout(() => { window._studentSaving = false; }, 5000);
+      // merge:true = 전체 덮어쓰기 대신 변경된 필드만 업데이트
+      await setDoc(doc(STUDENTS_COL, String(student.id)), student, { merge: true });
+      console.log('✅ 학생 저장:', student.name);
     } catch(e) {
-      window._studentSaving = false;
       console.warn('student 저장 실패:', e);
     }
   }
@@ -336,40 +334,42 @@ textarea{resize:vertical;min-height:80px}
       if (window.renderMain) window.renderMain();
     });
 
-    // 학생 컬렉션 변경 감지
+    // 학생 컬렉션 변경 감지 (변경된 학생만 업데이트)
     let syncTimeout = null;
     onSnapshot(STUDENTS_COL, (snap) => {
-      // 저장 직후면 무시 (내가 방금 저장한 거)
-      if (window._studentSaving) {
-        console.log('🔄 내 저장 중 - 동기화 스킵');
-        return;
-      }
-      // 프로필 페이지 열려있으면 해당 학생만 업데이트
       const profileActive = document.getElementById('page-profile')?.classList.contains('active');
-      
-      // 변경된 학생만 업데이트 (전체 덮어쓰기 방지)
+      let changed = false;
+
       snap.docChanges().forEach(change => {
-        const changedStudent = change.doc.data();
+        const s = change.doc.data();
         if (change.type === 'removed') {
-          window.DB.students = window.DB.students.filter(s => s.id != changedStudent.id);
+          window.DB.students = window.DB.students.filter(x => x.id != s.id);
+          changed = true;
         } else {
-          // 현재 편집 중인 학생이면 스킵
-          if (profileActive && window.curSid == changedStudent.id) {
-            console.log('🔄 현재 편집 중인 학생 동기화 스킵');
-            return;
+          // 현재 내가 편집 중인 학생이면 클래스 데이터는 스킵
+          if (profileActive && window.curSid == s.id) {
+            // 이름/전공 등 기본 정보만 업데이트, classes는 내 것 유지
+            const myStudent = window.DB.students.find(x => x.id == s.id);
+            if (myStudent) {
+              // classes, goals, inbody는 내 것 유지
+              s.classes = myStudent.classes;
+              s.goals = myStudent.goals;
+            }
           }
-          const idx = window.DB.students.findIndex(s => s.id == changedStudent.id);
-          if (idx >= 0) window.DB.students[idx] = changedStudent;
-          else window.DB.students.push(changedStudent);
+          const idx = window.DB.students.findIndex(x => x.id == s.id);
+          if (idx >= 0) window.DB.students[idx] = s;
+          else window.DB.students.push(s);
+          changed = true;
         }
       });
+
+      if (!changed) return;
       window.DB.students.sort((a,b) => a.name.localeCompare(b.name, 'ko'));
       DB = window.DB;
-      
-      if (!profileActive && window.renderMain) {
-        // 디바운스: 연속 변경 시 마지막 것만 렌더
+
+      if (!profileActive) {
         clearTimeout(syncTimeout);
-        syncTimeout = setTimeout(() => window.renderMain(), 500);
+        syncTimeout = setTimeout(() => { if(window.renderMain) window.renderMain(); }, 300);
       }
     });
 
@@ -1705,11 +1705,10 @@ function saveClsSel(){
   _saveStudentTimer=setTimeout(()=>{
     const latest=DB.students.find(x=>x.id===curSid);
     if(latest){
-      window._studentSaving=true;
       saveStudent(latest);
       console.log('✅ 수업 일괄 저장:', latest.name, Object.keys(latest.classes||{}).length+'개');
     }
-  },2000);
+  },1500);
 }
 
 // ═══════════════════════════════════════════
