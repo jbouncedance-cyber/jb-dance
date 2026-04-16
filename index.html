@@ -1045,20 +1045,22 @@ function renderStudentList(){
     const lastIb=s.inbody&&s.inbody.length?s.inbody[s.inbody.length-1]:null;
     const {reg,train,pickup}=getStudentClasses(s);
     const total=reg.length+train.length+(pickup?1:0);
+    const cardId='sc-'+s.id;
     return `<div class="card" style="margin-bottom:9px">
-      <div style="padding:12px 13px;display:flex;align-items:center;gap:11px;cursor:pointer;${total?'border-bottom:1px solid var(--border)':''}" onclick="openStudentLock(${s.id})">
+      <div style="padding:12px 13px;display:flex;align-items:center;gap:11px">
         <div style="font-size:12px;color:var(--gray2);min-width:19px;font-weight:700;text-align:center">${i+1}</div>
-        <div class="avatar">${s.photo?`<img src="${s.photo}">`:`${s.name[0]}`}</div>
-        <div style="flex:1;min-width:0">
+        <div class="avatar" onclick="openStudentLock(${s.id})" style="cursor:pointer">${s.photo?`<img src="${s.photo}">`:`${s.name[0]}`}</div>
+        <div style="flex:1;min-width:0;cursor:pointer" onclick="openStudentLock(${s.id})">
           <div style="font-size:16px;font-weight:800">${esc(s.name)}${hasReq?`<span class="alert-dot"></span>`:''}</div>
           <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-items:center">
             ${s.major?`<span class="badge pink">${esc(s.major)}</span>`:`<span class="badge gray">전공없음</span>`}
             ${lastIb?`<span class="badge green">📊 ${lastIb.score}점</span>`:''}
+            ${total?`<span class="badge gray">${total}개 수업</span>`:''}
           </div>
         </div>
-        <div style="color:var(--gray2);font-size:18px">›</div>
+        ${total?`<button onclick="toggleStudentClasses('${cardId}')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--gray);cursor:pointer;flex-shrink:0;font-family:inherit" id="btn-${cardId}">▼ 수업</button>`:'<div style="color:var(--gray2);font-size:18px;cursor:pointer" onclick="openStudentLock(${s.id})">›</div>'}
       </div>
-      ${total?`<div style="padding:9px 12px 11px">
+      ${total?`<div id="${cardId}" style="display:none;padding:9px 12px 11px;border-top:1px solid var(--border)">
         ${reg.length?`<div style="font-size:10px;font-weight:800;color:var(--pink);margin-bottom:5px;display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--pink);display:inline-block"></span>정규수업</div>
         <div style="display:flex;flex-wrap:wrap;margin-bottom:${train.length||pickup?'8px':'0'}">${reg.map(c=>{
           const t=c.timeStart?` ${c.day||''} ${c.timeStart}${c.timeEnd?'~'+c.timeEnd:''}`.trim():'';
@@ -1071,9 +1073,21 @@ function renderStudentList(){
         }).join('')}</div>`:''}
         ${pickup?`<div style="font-size:10px;font-weight:800;color:var(--teal);margin-bottom:5px;display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block"></span>이달의 픽업수업</div>
         <div style="display:flex;flex-wrap:wrap"><span class="chip-pickup"><span style="font-weight:700;color:var(--black)">${esc(pickup.name)}</span><span style="color:var(--teal);font-size:11px"> · ${esc(pickup.teacher)}</span></span></div>`:''}
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+          <button onclick="openStudentLock(${s.id})" style="width:100%;background:var(--pink-bg);border:1px solid #fbb6d8;border-radius:8px;padding:7px;font-size:12px;font-weight:700;color:var(--pink);cursor:pointer;font-family:inherit">개인 페이지 →</button>
+        </div>
       </div>`:''}
     </div>`;
   }).join('')}`;
+}
+
+function toggleStudentClasses(cardId){
+  const el=document.getElementById(cardId);
+  const btn=document.getElementById('btn-'+cardId);
+  if(!el) return;
+  const isOpen=el.style.display!=='none';
+  el.style.display=isOpen?'none':'block';
+  if(btn) btn.textContent=isOpen?'▼ 수업':'▲ 닫기';
 }
 
 // ═══════════════════════════════════════════
