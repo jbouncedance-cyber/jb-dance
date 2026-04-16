@@ -252,24 +252,30 @@ textarea{resize:vertical;min-height:80px}
   }
 
   // 실시간 동기화
-  let lastSaveTime = 0;
+  let isSaving = false;
   function startSync() {
     onSnapshot(REF, (snap) => {
+      // 내가 저장 중이면 무시
+      if (isSaving) return;
       if (!snap.exists()) return;
       const raw = snap.data();
       if (!raw || !raw.data) return;
-      // 내가 방금 저장한 거면 무시 (0.5초 이내)
-      if (Date.now() - lastSaveTime < 500) return;
-      applyFirebaseData(JSON.parse(raw.data));
+      const incoming = JSON.parse(raw.data);
+      // 현재 내 데이터와 같으면 무시
+      if (JSON.stringify(getUserData()) === JSON.stringify(incoming)) return;
+      applyFirebaseData(incoming);
+      DB = window.DB;
       if (window.renderMain) window.renderMain();
-      console.log('🔄 실시간 동기화');
+      console.log('🔄 다른 기기에서 변경 감지 - 동기화');
     });
   }
 
   // 전역 노출
   window.saveToFirestore = async function() {
-    lastSaveTime = Date.now();
+    isSaving = true;
     await saveToFirestore();
+    // 1.5초 후 동기화 다시 허용
+    setTimeout(() => { isSaving = false; }, 1500);
   };
 
   // 앱 시작
