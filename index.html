@@ -181,49 +181,71 @@ textarea{resize:vertical;min-height:80px}
   const db = getFirestore(app);
   const DB_DOC = doc(db, 'jbdance', 'maindb');
 
-  // Firestore에서 데이터 로드
+  async function saveToFirestore() {
+    try {
+      await setDoc(DB_DOC, { db: JSON.stringify(window.DB), updatedAt: new Date().toISOString() });
+      console.log('✅ Firestore 저장 완료');
+    } catch(e) {
+      console.warn('Firestore 저장 실패:', e);
+    }
+  }
+
   async function loadFromFirestore() {
     try {
       const snap = await getDoc(DB_DOC);
       if (snap.exists()) {
         const data = snap.data();
         if (data && data.db) {
-          DB = JSON.parse(data.db);
-          localStorage.setItem('jbd4', JSON.stringify(DB));
-          renderMain();
-          console.log('✅ Firestore에서 데이터 로드됨');
+          const parsed = JSON.parse(data.db);
+          // Firestore 데이터가 있으면 사용
+          // 단, regularClasses가 비어있거나 시간 정보가 없으면 코드 기본값 우선
+          const fsClasses = parsed.regularClasses || [];
+          const hasTimeInfo = fsClasses.some(c => c.timeStart && c.timeStart !== '');
+          if (hasTimeInfo) {
+            window.DB = parsed;
+            localStorage.setItem('jbd4', JSON.stringify(window.DB));
+            console.log('✅ Firestore 데이터 로드 (시간정보 있음)');
+          } else {
+            // 코드 기본값의 수업 정보는 유지하고, 학생/이벤트 등 사용자 데이터만 Firestore에서 가져옴
+            window.DB.students = parsed.students || window.DB.students;
+            window.DB.events = parsed.events || window.DB.events;
+            window.DB.requests = parsed.requests || window.DB.requests;
+            window.DB.notice = parsed.notice || window.DB.notice;
+            window.DB.adminPw = parsed.adminPw || window.DB.adminPw;
+            console.log('✅ 수업시간 코드 기본값 유지, 사용자 데이터만 Firestore에서 로드');
+            // 업데이트된 DB를 Firestore에 다시 저장
+            await saveToFirestore();
+            localStorage.setItem('jbd4', JSON.stringify(window.DB));
+          }
+        } else {
+          // Firestore에 데이터 없음 → 코드 기본값 저장
+          await saveToFirestore();
+          console.log('✅ 코드 기본값을 Firestore에 저장');
         }
       } else {
-        // 최초 실행: localStorage 데이터를 Firestore에 저장
+        // 문서 없음 → 코드 기본값 저장
         await saveToFirestore();
-        console.log('✅ 최초 데이터 Firestore에 저장됨');
+        console.log('✅ 코드 기본값을 Firestore에 저장 (문서 없음)');
       }
     } catch(e) {
-      console.warn('Firestore 로드 실패, localStorage 사용:', e);
+      console.warn('Firestore 로드 실패, 코드 기본값 사용:', e);
     }
+    // 항상 renderMain 호출
+    if (window.renderMain) window.renderMain();
   }
 
-  // Firestore에 저장
-  async function saveToFirestore() {
-    try {
-      await setDoc(DB_DOC, { db: JSON.stringify(DB), updatedAt: new Date().toISOString() });
-    } catch(e) {
-      console.warn('Firestore 저장 실패:', e);
-    }
-  }
-
-  // 실시간 동기화 (다른 기기에서 변경시 자동 반영)
   function startSync() {
     onSnapshot(DB_DOC, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
         if (data && data.db) {
           const newDB = JSON.parse(data.db);
-          // 내가 방금 저장한 거면 무시 (중복 렌더 방지)
-          if (JSON.stringify(newDB) !== JSON.stringify(DB)) {
-            DB = newDB;
-            localStorage.setItem('jbd4', JSON.stringify(DB));
-            renderMain();
+          const fsClasses = newDB.regularClasses || [];
+          const hasTimeInfo = fsClasses.some(c => c.timeStart && c.timeStart !== '');
+          if (hasTimeInfo && JSON.stringify(newDB) !== JSON.stringify(window.DB)) {
+            window.DB = newDB;
+            localStorage.setItem('jbd4', JSON.stringify(window.DB));
+            if (window.renderMain) window.renderMain();
             console.log('🔄 실시간 동기화됨');
           }
         }
@@ -231,15 +253,17 @@ textarea{resize:vertical;min-height:80px}
     });
   }
 
-  // 전역으로 노출 (기존 save 함수에서 호출)
   window.saveToFirestore = saveToFirestore;
 
-  // 앱 시작시 로드 + 동기화 시작
   document.addEventListener('DOMContentLoaded', async () => {
-    await loadFromFirestore();
-    startSync();
+    // 잠시 대기 후 로드 (메인 스크립트 초기화 완료 후)
+    setTimeout(async () => {
+      await loadFromFirestore();
+      startSync();
+    }, 500);
   });
 </script>
+
 </head>
 <body>
 
