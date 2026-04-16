@@ -149,10 +149,9 @@ textarea{resize:vertical;min-height:80px}
 .pickup-hist-item{padding:8px 11px;border-radius:9px;background:var(--teal-bg);border:1px solid var(--teal-bd);margin-bottom:5px;font-size:13px}
 /* notice */
 .notice-content{font-size:15px;line-height:1.8;color:var(--black);white-space:pre-wrap}
-.postit-wrap{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:10px;padding:4px 2px 10px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-.postit-wrap::-webkit-scrollbar{display:none}
-.postit{flex-shrink:0;width:150px;min-height:130px;border-radius:3px;padding:12px 11px 10px;position:relative;box-shadow:2px 3px 8px rgba(0,0,0,.13),0 1px 2px rgba(0,0,0,.08);display:flex;flex-direction:column;cursor:pointer;transition:transform .15s}
-.postit:hover{transform:rotate(0deg) scale(1.03)}
+.postit-wrap{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:2px 0 4px}
+.postit{min-height:110px;border-radius:3px;padding:11px 10px 9px;position:relative;box-shadow:2px 3px 8px rgba(0,0,0,.13),0 1px 2px rgba(0,0,0,.08);display:flex;flex-direction:column;cursor:pointer;transition:transform .15s}
+.postit:active{transform:scale(0.97)}
 .postit::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:rgba(0,0,0,.08);border-radius:3px 3px 0 0}
 .postit-author{font-size:11px;font-weight:800;margin-bottom:6px;opacity:.8}
 .postit-content{font-size:12px;line-height:1.5;flex:1;word-break:break-all}
@@ -584,7 +583,7 @@ textarea{resize:vertical;min-height:80px}
 <!-- Notice view -->
 <div class="modal-overlay" id="modal-notice" onclick="if(event.target===this)closeM('modal-notice')">
   <div class="modal">
-    <div class="modal-head"><div class="modal-title">📢 공지사항</div><button class="close-btn" onclick="closeM('modal-notice')">✕</button></div>
+    <div class="modal-head"><div class="modal-title" id="notice-view-title">공지사항</div><button class="close-btn" onclick="closeM('modal-notice')">✕</button></div>
     <div class="modal-body"><div class="notice-content" id="notice-txt"></div></div>
     <div class="modal-foot"><button class="btn btn-gray" onclick="closeM('modal-notice')">닫기</button></div>
   </div>
@@ -770,18 +769,27 @@ function updAlertDot(){const n=DB.requests.filter(r=>!r.read).length;const d=doc
 // ═══════════════════════════════════════════
 function renderNoticeBar(){
   const w=document.getElementById('notice-bar-wrap');
-  if(!DB.notice){w.innerHTML='';return;}
-  const prev=DB.notice.replace(/\n/g,' ').substring(0,55)+(DB.notice.length>55?'…':'');
-  w.innerHTML=`<div class="notice-bar" onclick="viewNotice()">
-    <div style="font-size:18px;flex-shrink:0">📢</div>
-    <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:800;color:var(--pink)">공지사항</div>
-      <div style="font-size:12px;color:#666;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(prev)}</div>
-    </div>
-    <div style="color:var(--pink);font-size:16px">›</div>
+  const notices=DB.notices||[];
+  if(!notices.length){w.innerHTML='';return;}
+  w.innerHTML=`<div style="margin-bottom:10px">
+    <div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:6px;padding:0 2px">📢 공지사항</div>
+    ${notices.map((n,i)=>`
+    <div onclick="viewNotice(${i})" style="background:var(--white);border:1px solid var(--border);border-left:3px solid var(--pink);border-radius:10px;padding:10px 13px;margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:800;color:var(--pink)">${esc(n.title)}</div>
+        <div style="font-size:11px;color:var(--gray);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((n.content||'').replace(/\n/g,' ').substring(0,40))}${(n.content||'').length>40?'…':''}</div>
+      </div>
+      <div style="color:var(--gray2);font-size:18px;flex-shrink:0">›</div>
+    </div>`).join('')}
   </div>`;
 }
-function viewNotice(){document.getElementById('notice-txt').textContent=DB.notice;openM('modal-notice');}
+function viewNotice(idx){
+  const n=(DB.notices||[])[idx];
+  if(!n) return;
+  document.getElementById('notice-view-title').textContent=n.title;
+  document.getElementById('notice-txt').textContent=n.content||'';
+  openM('modal-notice');
+}
 
 // ═══════════════════════════════════════════
 // MESSAGE BOARD
@@ -1883,15 +1891,62 @@ function delReq(id){DB.requests=DB.requests.filter(x=>x.id!==id);save();renderAd
 
 // ── Notice
 function renderAdmNotice(c){
-  c.innerHTML=`<div class="card">
-    <div class="card-head"><div class="card-title">📢 공지사항 관리</div></div>
+  const notices=DB.notices||[];
+  c.innerHTML=`
+  <div class="adm-section" style="margin-bottom:12px">
+    <div style="padding:10px 13px;background:var(--pink-bg);border-bottom:1px solid var(--border);font-weight:800;font-size:13px;color:var(--pink)">📢 등록된 공지 ${notices.length}개</div>
+    ${!notices.length?'<div class="empty-msg" style="padding:16px">등록된 공지가 없습니다</div>':
+    notices.map((n,i)=>`<div class="adm-row">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:13px">${esc(n.title)}</div>
+        <div style="font-size:11px;color:var(--gray);margin-top:1px">${esc((n.content||'').replace(/\n/g,' ').substring(0,30))}…</div>
+      </div>
+      <button class="edt-btn" onclick="editNotice(${i})" style="margin-right:4px">수정</button>
+      <button class="del-btn" onclick="delNotice(${i})">삭제</button>
+    </div>`).join('')}
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="card-title" id="notice-form-title">+ 새 공지 추가</div></div>
     <div class="card-body">
-      <div class="form-row"><label class="form-label">공지 내용 (비워두면 숨김)</label><textarea id="notice-inp" style="min-height:150px" placeholder="공지 내용을 입력하세요...">${esc(DB.notice||'')}</textarea></div>
-      <button class="btn btn-pink" onclick="saveNotice()">저장하기</button>
+      <input type="hidden" id="notice-edit-idx" value="-1">
+      <div class="form-row"><label class="form-label">제목</label><input type="text" id="notice-title-inp" placeholder="예: 입시반 규칙, 홀 사용방법"></div>
+      <div class="form-row"><label class="form-label">내용</label><textarea id="notice-inp" style="min-height:150px" placeholder="공지 내용을 입력하세요..."></textarea></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-pink" onclick="saveNotice()">저장하기</button>
+        <button class="btn btn-gray" onclick="resetNoticeForm()" id="notice-cancel-btn" style="display:none">취소</button>
+      </div>
     </div>
   </div>`;
 }
-function saveNotice(){DB.notice=document.getElementById('notice-inp').value;save();alert('공지사항이 저장됐습니다!');}
+function saveNotice(){
+  const title=document.getElementById('notice-title-inp').value.trim();
+  const content=document.getElementById('notice-inp').value.trim();
+  if(!title){alert('제목을 입력해주세요');return}
+  if(!DB.notices) DB.notices=[];
+  const idx=parseInt(document.getElementById('notice-edit-idx').value);
+  if(idx>=0) DB.notices[idx]={title,content};
+  else DB.notices.push({title,content});
+  save();alert('공지가 저장됐습니다!');renderAdmContent();
+}
+function editNotice(i){
+  const n=(DB.notices||[])[i];if(!n) return;
+  document.getElementById('notice-edit-idx').value=i;
+  document.getElementById('notice-title-inp').value=n.title;
+  document.getElementById('notice-inp').value=n.content||'';
+  document.getElementById('notice-form-title').textContent='✏️ 공지 수정';
+  document.getElementById('notice-cancel-btn').style.display='block';
+}
+function delNotice(i){
+  if(!confirm('공지를 삭제하시겠습니까?')) return;
+  (DB.notices||[]).splice(i,1);save();renderAdmContent();
+}
+function resetNoticeForm(){
+  document.getElementById('notice-edit-idx').value='-1';
+  document.getElementById('notice-title-inp').value='';
+  document.getElementById('notice-inp').value='';
+  document.getElementById('notice-form-title').textContent='+ 새 공지 추가';
+  document.getElementById('notice-cancel-btn').style.display='none';
+}
 
 // ── Settings
 function renderAdmSettings(c){
