@@ -278,6 +278,7 @@ textarea{resize:vertical;min-height:80px}
   </div>
   <div class="content">
     <div id="notice-bar-wrap"></div>
+    <div id="message-board-wrap"></div>
     <div id="student-list-wrap"></div>
   </div>
   <div class="bottom-nav">
@@ -477,6 +478,36 @@ textarea{resize:vertical;min-height:80px}
   </div>
 </div>
 
+<!-- Message board write modal -->
+<div class="modal-overlay" id="modal-msg" onclick="if(event.target===this)closeM('modal-msg')">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">✍️ 한마디 남기기</div>
+      <button class="close-btn" onclick="closeM('modal-msg')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label class="form-label">이름 선택</label>
+        <select id="msg-author">
+          <option value="">— 이름 선택 —</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">비밀번호 (4자리)</label>
+        <input type="password" id="msg-pw" placeholder="본인 비밀번호" maxlength="4">
+      </div>
+      <div class="form-row">
+        <label class="form-label">내용</label>
+        <textarea id="msg-content" placeholder="예: 오늘 7시 연습할 사람~&#10;대회 같이 갈 사람 구해요!&#10;배틀 나갈 사람?" style="min-height:100px"></textarea>
+      </div>
+      <div class="error-msg" id="msg-err"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-pink" onclick="submitMsg()">올리기</button>
+    </div>
+  </div>
+</div>
+
 <!-- Notice view -->
 <div class="modal-overlay" id="modal-notice" onclick="if(event.target===this)closeM('modal-notice')">
   <div class="modal">
@@ -628,7 +659,8 @@ let DB = JSON.parse(localStorage.getItem('jbd4')||'null') || {
     {id:'e3',date:'2025-09-20',name:'가을 오디션',memo:''},
     {id:'e4',date:'2025-12-13',name:'겨울 발표회',memo:'연말 공연'},
   ],
-  requests:[]
+  requests:[],
+  messages:[]
 };
 function save(){
   localStorage.setItem('jbd4',JSON.stringify(DB));
@@ -657,7 +689,7 @@ function showPage(id){
   if(id==='page-main') renderMain();
   if(id==='page-schedule') renderSchedule();
 }
-function renderMain(){renderNoticeBar();renderStudentList();updAlertDot();}
+function renderMain(){renderNoticeBar();renderMsgBoard();renderStudentList();updAlertDot();}
 function updAlertDot(){const n=DB.requests.filter(r=>!r.read).length;const d=document.getElementById('main-alert');if(d)d.style.display=n?'inline':'none';}
 
 // ═══════════════════════════════════════════
@@ -677,6 +709,70 @@ function renderNoticeBar(){
   </div>`;
 }
 function viewNotice(){document.getElementById('notice-txt').textContent=DB.notice;openM('modal-notice');}
+
+// ═══════════════════════════════════════════
+// MESSAGE BOARD
+// ═══════════════════════════════════════════
+function renderMsgBoard(){
+  const w=document.getElementById('message-board-wrap');
+  if(!w) return;
+  const msgs=(DB.messages||[]).slice().reverse().slice(0,20);
+  w.innerHTML=`<div class="card" style="margin-bottom:10px">
+    <div style="padding:11px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:14px;font-weight:800">💬 오늘의 한마디</div>
+        <div style="font-size:11px;color:var(--gray);margin-top:1px">자유롭게 소통해요</div>
+      </div>
+      <button class="sbtn pink" onclick="openMsgModal()">+ 남기기</button>
+    </div>
+    ${!msgs.length?`<div class="empty-msg" style="padding:18px;font-size:13px">아직 아무도 안 남겼어요. 첫 한마디를 남겨보세요! 😊</div>`:
+    msgs.map(m=>`
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start">
+      <div style="width:34px;height:34px;border-radius:50%;background:var(--pink-bg);border:2px solid var(--pink2);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--pink);flex-shrink:0">${m.author[0]}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+          <span style="font-size:13px;font-weight:800">${esc(m.author)}</span>
+          <span style="font-size:11px;color:var(--gray)">${m.time}</span>
+        </div>
+        <div style="font-size:13px;line-height:1.5;color:var(--black)">${esc(m.content).replace(/\n/g,'<br>')}</div>
+      </div>
+      ${isAdmin?`<button onclick="delMsg('${m.id}')" style="background:none;border:none;color:var(--gray2);cursor:pointer;font-size:16px;padding:0;flex-shrink:0">×</button>`:''}
+    </div>`).join('')}
+  </div>`;
+}
+
+function openMsgModal(){
+  const sel=document.getElementById('msg-author');
+  sel.innerHTML=`<option value="">— 이름 선택 —</option>${DB.students.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}`;
+  document.getElementById('msg-pw').value='';
+  document.getElementById('msg-content').value='';
+  document.getElementById('msg-err').textContent='';
+  openM('modal-msg');
+}
+
+function submitMsg(){
+  const sid=document.getElementById('msg-author').value;
+  const pw=document.getElementById('msg-pw').value;
+  const content=document.getElementById('msg-content').value.trim();
+  const errEl=document.getElementById('msg-err');
+  if(!sid){errEl.textContent='이름을 선택해주세요';return}
+  if(!pw){errEl.textContent='비밀번호를 입력해주세요';return}
+  if(!content){errEl.textContent='내용을 입력해주세요';return}
+  const s=DB.students.find(x=>x.id==sid);
+  if(!s||s.pw!==pw){errEl.textContent='비밀번호가 틀렸습니다';return}
+  if(!DB.messages) DB.messages=[];
+  const now=new Date();
+  const time=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  DB.messages.push({id:'msg'+Date.now(),author:s.name,content,time});
+  // 최대 50개만 유지
+  if(DB.messages.length>50) DB.messages=DB.messages.slice(-50);
+  save();closeM('modal-msg');renderMsgBoard();
+}
+
+function delMsg(id){
+  DB.messages=(DB.messages||[]).filter(x=>x.id!==id);
+  save();renderMsgBoard();
+}
 
 // ═══════════════════════════════════════════
 // STUDENT LIST
