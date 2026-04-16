@@ -1416,103 +1416,110 @@ function showTimetablePage(){
 }
 function renderTimetable(s){
   const el=document.getElementById('tt-content');
-  // Collect all classes for this student with day/time info
   const entries=[];
   REG_SLOTS.forEach(slot=>{
-    const id=s.classes?.[slot.key];
-    if(!id) return;
+    const id=s.classes?.[slot.key];if(!id) return;
     const c=DB.regularClasses.find(x=>x.id===id);
-    if(c&&c.day&&c.timeStart) entries.push({type:'reg',name:c.name,teacher:c.teacher,day:c.day,start:c.timeStart,end:c.timeEnd});
+    if(c) entries.push({type:'reg',name:c.name,teacher:c.teacher,day:c.day||'',start:c.timeStart||'',end:c.timeEnd||''});
   });
   DB.trainingSlots.forEach(ts=>{
-    const id=s.classes?.[ts.slotKey];
-    if(!id) return;
+    const id=s.classes?.[ts.slotKey];if(!id) return;
     const o=ts.options.find(x=>x.id===id);
-    if(o&&o.day&&o.timeStart) entries.push({type:'train',name:o.name,teacher:o.teacher,day:o.day,start:o.timeStart,end:o.timeEnd});
+    if(o) entries.push({type:'train',name:o.name,teacher:o.teacher,day:o.day||'',start:o.timeStart||'',end:o.timeEnd||''});
   });
-  // pickup
   const now=new Date();
   const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const ph=(s.pickupHistory||[]).find(h=>h.month===ym);
-  if(ph&&ph.classId){const c=DB.regularClasses.find(x=>x.id===ph.classId);if(c&&c.day&&c.timeStart) entries.push({type:'pickup',name:c.name,teacher:c.teacher,day:c.day,start:c.timeStart,end:c.timeEnd});}
+  if(ph&&ph.classId){const c=DB.regularClasses.find(x=>x.id===ph.classId);if(c) entries.push({type:'pickup',name:c.name,teacher:c.teacher,day:c.day||'',start:c.timeStart||'',end:c.timeEnd||''});}
 
   if(!entries.length){
-    el.innerHTML=`<div class="card"><div class="card-body"><div class="empty-msg">시간 정보가 입력된 수업이 없어요<br><span style="font-size:12px;color:var(--gray2)">관리자 페이지에서 요일·시간을 입력해주세요</span></div></div></div>`;
+    el.innerHTML=`<div class="card"><div class="card-body"><div class="empty-msg">시간 정보가 입력된 수업이 없어요</div></div></div>`;
     return;
   }
 
-  // Find time range
-  const toMin=t=>{if(!t) return null;const[h,m]=t.split(':').map(Number);return h*60+m;};
-  const allMins=entries.flatMap(e=>[toMin(e.start),toMin(e.end)].filter(Boolean));
-  const minTime=Math.floor(Math.min(...allMins)/60)*60;
-  const maxTime=Math.ceil(Math.max(...allMins)/60)*60;
+  const DAYS=['월','화','수','목','금','토','일'];
+  const toMin=t=>{if(!t)return 0;const[h,m]=t.split(':').map(Number);return h*60+m;};
 
-  // Build time slots (30min intervals)
-  const timeSlots=[];
-  for(let m=minTime;m<maxTime;m+=30) timeSlots.push(m);
-
-  // Group entries by day
+  // 요일별로 그룹화
   const byDay={};
   DAYS.forEach(d=>byDay[d]=[]);
-  entries.forEach(e=>{if(byDay[e.day]) byDay[e.day].push(e);});
+  entries.forEach(e=>{if(e.day&&byDay[e.day]) byDay[e.day].push(e);});
   const activeDays=DAYS.filter(d=>byDay[d].length>0);
 
-  const fmtT=min=>{const h=Math.floor(min/60),m=min%60;return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;};
-  const dayColor={'토':'color:var(--blue)','일':'color:var(--red)'};
+  const typeColor={reg:'var(--pink)',train:'var(--blue)',pickup:'var(--teal)'};
+  const typeBg={reg:'var(--pink-bg)',train:'var(--blue-bg)',pickup:'var(--teal-bg)'};
+  const typeBd={reg:'#fbb6d8',train:'var(--blue-bd)',pickup:'var(--teal-bd)'};
+  const typeLabel={reg:'정규',train:'트레이닝',pickup:'픽업'};
 
-  let html=`<div class="card" style="margin-bottom:10px">
-    <div class="card-head">
-      <div class="card-title">📋 ${esc(s.name)} 수업 시간표</div>
-    </div>
-    <div class="card-body" style="padding:10px 8px">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-        <div style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--pink-bg);border-left:3px solid var(--pink);display:inline-block"></span><span style="font-size:11px;color:var(--gray)">정규수업</span></div>
-        <div style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--blue-bg);border-left:3px solid var(--blue);display:inline-block"></span><span style="font-size:11px;color:var(--gray)">트레이닝</span></div>
-        <div style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--teal-bg);border-left:3px solid var(--teal);display:inline-block"></span><span style="font-size:11px;color:var(--gray)">픽업수업</span></div>
-      </div>
-      <div class="tt-wrap">
-        <table class="tt-table">
-          <thead><tr>
-            <th style="min-width:50px">시간</th>
-            ${activeDays.map(d=>`<th class="${d==='토'?'sat':d==='일'?'sun':''}">${d}</th>`).join('')}
-          </tr></thead>
-          <tbody>
-            ${timeSlots.map(tmin=>{
-              const label=fmtT(tmin)+'~'+fmtT(tmin+30);
-              return `<tr>
-                <td class="time-col">${fmtT(tmin)}</td>
-                ${activeDays.map(day=>{
-                  const cls=byDay[day].filter(e=>{
-                    const s=toMin(e.start),en=toMin(e.end)||s+60;
-                    return s<=tmin&&tmin<en;
-                  });
-                  if(!cls.length) return `<td></td>`;
-                  return `<td>${cls.map(c=>`<div class="tt-cell ${c.type}">
-                    <div class="cc-name">${esc(c.name)}</div>
-                    ${c.teacher?`<div class="cc-teacher">${esc(c.teacher)}</div>`:''}
-                  </div>`).join('')}</td>`;
-                }).join('')}
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>`;
+  // 총 수업 수, 요일 수 요약
+  const totalCnt=entries.length;
+  const dayCnt=activeDays.length;
 
-  // List view too
-  html+=`<div class="card">
-    <div class="card-head"><div class="card-title">📝 수업 목록</div></div>
-    <div class="card-body" style="padding:8px">
-      ${entries.sort((a,b)=>DAYS.indexOf(a.day)-DAYS.indexOf(b.day)||(toMin(a.start)||0)-(toMin(b.start)||0)).map(e=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid var(--border)">
-        <div style="width:28px;text-align:center;font-size:12px;font-weight:800;color:${e.day==='토'?'var(--blue)':e.day==='일'?'var(--red)':'var(--black)'}">${e.day}</div>
-        <div style="flex:1"><div style="font-weight:700;font-size:13px">${esc(e.name)}</div>${e.teacher?`<div style="font-size:11px;color:var(--gray)">${esc(e.teacher)}</div>`:''}</div>
-        <div style="font-size:12px;color:var(--gray);white-space:nowrap">${e.start}${e.end?'~'+e.end:''}</div>
-        <span class="badge ${e.type==='reg'?'pink':e.type==='train'?'blue':'teal'}" style="font-size:10px">${e.type==='reg'?'정규':e.type==='train'?'트레이닝':'픽업'}</span>
+  let html=`
+  <!-- 요약 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+    <div style="background:var(--white);border-radius:12px;border:1px solid var(--border);padding:12px;text-align:center">
+      <div style="font-size:20px;font-weight:900;color:var(--pink)">${totalCnt}</div>
+      <div style="font-size:11px;color:var(--gray);margin-top:2px">전체 수업</div>
+    </div>
+    <div style="background:var(--white);border-radius:12px;border:1px solid var(--border);padding:12px;text-align:center">
+      <div style="font-size:20px;font-weight:900;color:var(--blue)">${dayCnt}</div>
+      <div style="font-size:11px;color:var(--gray);margin-top:2px">등원 요일</div>
+    </div>
+    <div style="background:var(--white);border-radius:12px;border:1px solid var(--border);padding:12px;text-align:center">
+      <div style="font-size:20px;font-weight:900;color:var(--green)">${entries.filter(e=>e.type==='reg').length}</div>
+      <div style="font-size:11px;color:var(--gray);margin-top:2px">정규수업</div>
+    </div>
+  </div>
+
+  <!-- 범례 -->
+  <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--pink-bg);border-left:3px solid var(--pink);display:inline-block"></span><span style="font-size:11px;color:var(--gray)">정규수업</span></div>
+    <div style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--blue-bg);border-left:3px solid var(--blue);display:inline-block"></span><span style="font-size:11px;color:var(--gray)">트레이닝</span></div>
+    <div style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--teal-bg);border-left:3px solid var(--teal);display:inline-block"></span><span style="font-size:11px;color:var(--gray)">픽업수업</span></div>
+  </div>
+
+  <!-- 요일별 목록 -->
+  ${activeDays.map(day=>{
+    const classes=[...byDay[day]].sort((a,b)=>toMin(a.start)-toMin(b.start));
+    const dayColor=day==='토'?'var(--blue)':day==='일'?'var(--red)':'var(--black)';
+    return `<div class="card" style="margin-bottom:10px">
+      <div style="padding:10px 14px;background:var(--light);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <div style="font-size:18px;font-weight:900;color:${dayColor};min-width:28px">${day}</div>
+        <div style="font-size:12px;color:var(--gray)">${classes.length}개 수업</div>
+      </div>
+      ${classes.map(c=>`
+      <div style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
+        <div style="width:4px;align-self:stretch;border-radius:2px;background:${typeColor[c.type]};flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:700">${esc(c.name)}</div>
+          ${c.teacher?`<div style="font-size:12px;color:var(--gray);margin-top:2px">${esc(c.teacher)}</div>`:''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          ${c.start?`<div style="font-size:13px;font-weight:700;color:${typeColor[c.type]}">${c.start}${c.end?'~'+c.end:''}</div>`:''}
+          <div style="font-size:10px;color:var(--gray);margin-top:1px;background:${typeBg[c.type]};border:1px solid ${typeBd[c.type]};border-radius:6px;padding:1px 6px">${typeLabel[c.type]}</div>
+        </div>
       </div>`).join('')}
+    </div>`;
+  }).join('')}
+
+  <!-- 시간 미입력 수업 -->
+  ${entries.filter(e=>!e.day).length?`
+  <div class="card">
+    <div style="padding:10px 14px;background:var(--light);border-bottom:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:700;color:var(--gray)">⏰ 시간 미입력 수업</div>
     </div>
-  </div>`;
+    ${entries.filter(e=>!e.day).map(c=>`
+    <div style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
+      <div style="width:4px;align-self:stretch;border-radius:2px;background:${typeColor[c.type]};flex-shrink:0"></div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:700">${esc(c.name)}</div>
+        ${c.teacher?`<div style="font-size:12px;color:var(--gray)">${esc(c.teacher)}</div>`:''}
+      </div>
+      <div style="font-size:10px;color:var(--gray);background:${typeBg[c.type]};border:1px solid ${typeBd[c.type]};border-radius:6px;padding:1px 6px">${typeLabel[c.type]}</div>
+    </div>`).join('')}
+  </div>`:''}
+  `;
   el.innerHTML=html;
 }
 
