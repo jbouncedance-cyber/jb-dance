@@ -245,6 +245,8 @@ textarea{resize:vertical;min-height:80px}
         console.log('✅ 초기 데이터 Firebase에 저장');
       }
     } catch(e) { console.warn('Firebase 로드 실패:', e); }
+    // DB 변수 동기화 (메인 스크립트의 DB와 window.DB 일치)
+    DB = window.DB;
     // 항상 화면 갱신
     if (window.renderMain) window.renderMain();
   }
@@ -649,7 +651,7 @@ textarea{resize:vertical;min-height:80px}
 // ═══════════════════════════════════════════
 // DATA
 // ═══════════════════════════════════════════
-let DB = JSON.parse(localStorage.getItem('jbd4')||'null') || {
+window.DB = JSON.parse(localStorage.getItem('jbd4')||'null') || {
   adminPw:'1234', notice:'',
   students:[
     {id:1,name:'김민지',birth:'2005-03-12',major:'팝핑',pw:'1111',photo:'',classes:{},goals:{monthly:'',dancer:''},inbody:[],pickupHistory:[]},
@@ -733,7 +735,7 @@ let DB = JSON.parse(localStorage.getItem('jbd4')||'null') || {
   messages:[]
 };
 function save(){
-  localStorage.setItem('jbd4',JSON.stringify(DB));
+  localStorage.setItem('jbd4',JSON.stringify(window.DB));
   if(window.saveToFirestore) window.saveToFirestore();
 }
 
