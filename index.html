@@ -2,6 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2045,6 +2048,24 @@ document.head.appendChild(style);
 
 // Init
 renderMain();
+</script>
+
+<script>
+// 서비스워커 제거 (캐시 문제 방지)
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    regs.forEach(function(reg){ reg.unregister(); });
+  });
+}
+// 버전 체크 - 업데이트시 자동 새로고침
+var BUILD_VER = '202604161047';
+var savedVer = localStorage.getItem('jbd_ver');
+if(savedVer && savedVer !== BUILD_VER){
+  localStorage.setItem('jbd_ver', BUILD_VER);
+  window.location.reload(true);
+} else {
+  localStorage.setItem('jbd_ver', BUILD_VER);
+}
 </script>
 </body>
 </html>
