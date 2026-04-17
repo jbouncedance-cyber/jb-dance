@@ -1142,6 +1142,18 @@ function delReply(msgId,repId){
 }
 
 // ═══════════════════════════════════════════
+// STATE & CONSTANTS
+// ═══════════════════════════════════════════
+let curSid=null, curSlotKey=null, isAdmin=false, editEvId=null, selClsId=null;
+let pinVal='', admTab_='students', clsTab_='regular';
+const REG_SLOTS=[
+  {key:'r0',label:'전공1'},{key:'r1',label:'전공2'},{key:'r2',label:'전공3'},
+  {key:'r3',label:'부전공1'},{key:'r4',label:'부전공2'},{key:'r5',label:'부전공3'},{key:'r6',label:'부전공4'},
+  {key:'r7',label:'대체수업'},
+];
+const DAYS=['월','화','수','목','금','토','일'];
+
+// ═══════════════════════════════════════════
 // STUDENT LIST
 // ═══════════════════════════════════════════
 function getStudentClasses(s){
