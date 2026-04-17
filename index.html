@@ -244,7 +244,7 @@ textarea{resize:vertical;min-height:80px}
 
   async function saveMessage(message) {
     try {
-      await setDoc(doc(MESSAGES_COL, String(message.id)), message);
+      await setDoc(doc(MESSAGES_COL, String(message.id)), message, { merge: true });
     } catch(e) { console.warn('message 저장 실패:', e); }
   }
 
@@ -373,19 +373,35 @@ textarea{resize:vertical;min-height:80px}
       }
     });
 
-    // 메시지 변경 감지
+    // 메시지 변경 감지 (변경된 것만 업데이트)
     onSnapshot(MESSAGES_COL, (snap) => {
-      window.DB.messages = [];
-      snap.forEach(d => window.DB.messages.push(d.data()));
+      snap.docChanges().forEach(change => {
+        const m = change.doc.data();
+        if (change.type === 'removed') {
+          window.DB.messages = window.DB.messages.filter(x => x.id !== m.id);
+        } else {
+          const idx = window.DB.messages.findIndex(x => x.id === m.id);
+          if (idx >= 0) window.DB.messages[idx] = m;
+          else window.DB.messages.push(m);
+        }
+      });
       window.DB.messages.sort((a,b) => a.id.localeCompare(b.id));
       DB = window.DB;
       if (window.renderMain) window.renderMain();
     });
 
-    // 신청 변경 감지
+    // 신청 변경 감지 (변경된 것만 업데이트)
     onSnapshot(REQUESTS_COL, (snap) => {
-      window.DB.requests = [];
-      snap.forEach(d => window.DB.requests.push(d.data()));
+      snap.docChanges().forEach(change => {
+        const r = change.doc.data();
+        if (change.type === 'removed') {
+          window.DB.requests = window.DB.requests.filter(x => x.id !== r.id);
+        } else {
+          const idx = window.DB.requests.findIndex(x => x.id === r.id);
+          if (idx >= 0) window.DB.requests[idx] = r;
+          else window.DB.requests.push(r);
+        }
+      });
       DB = window.DB;
       if (window.renderMain) window.renderMain();
     });
