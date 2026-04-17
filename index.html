@@ -889,36 +889,17 @@ window.DB = {
   requests:[],
   messages:[]
 };
-function save(type, studentId){
+function save(type, id){
   localStorage.setItem('jbd4',JSON.stringify(window.DB));
-  // type에 따라 해당 데이터만 Firebase에 저장
-  if(type==='student' && studentId){
-    const s=window.DB.students.find(x=>x.id===studentId);
-    if(s && window.fb) window.fb.saveStudent(s);
-  } else if(type==='message'){
-    if(window.fbSaveMessages) window.fbSaveMessages();
-  } else {
-    // config (공지, 행사, 관리자PW 등)
-    if(window.fbSaveConfig) window.fbSaveConfig();
+  if(!window.fb) return;
+  if(type==='student'){
+    const s=window.DB.students.find(x=>x.id===id)||window.DB.students.find(x=>x.id===curSid);
+    if(s) window.fb.saveStudent(s);
+  } else if(type==='config'){
+    window.fb.saveConfig();
   }
 }
 
-// ═══════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════
-let curSid=null, curSlotKey=null, isAdmin=false, editEvId=null, selClsId=null;
-let pinVal='', admTab_='students', clsTab_='regular';
-
-const REG_SLOTS=[
-  {key:'r0',label:'전공1'},{key:'r1',label:'전공2'},{key:'r2',label:'전공3'},
-  {key:'r3',label:'부전공1'},{key:'r4',label:'부전공2'},{key:'r5',label:'부전공3'},{key:'r6',label:'부전공4'},
-  {key:'r7',label:'대체수업'},
-];
-const DAYS=['월','화','수','목','금','토','일'];
-
-// ═══════════════════════════════════════════
-// NAVIGATION
-// ═══════════════════════════════════════════
 function saveConfig(){ if(window.fb) window.fb.saveConfig(); }
 function saveStudent(s){ if(window.fb&&s) window.fb.saveStudent(s); }
 function fbDeleteStudent(id){ if(window.fb) window.fb.deleteStudent(id); }
@@ -1097,7 +1078,7 @@ function submitMsg(){
   const newMsg={id:'msg'+Date.now(),author:authorName,isTeacher,content,time,replies:[]};
   DB.messages.push(newMsg);
   if(DB.messages.length>50) DB.messages=DB.messages.slice(-50);
-  save('message');closeM('modal-msg');renderMsgBoard();
+  if(window.fb) window.fb.saveMessage(newMsg).then(()=>console.log('✅ 메시지 저장됨'));closeM('modal-msg');renderMsgBoard();
 }
 
 function openReplyModal(msgId){
@@ -1144,7 +1125,7 @@ function submitReply(){
   const now=new Date();
   const time=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   m.replies.push({id:'rep'+Date.now(),author:authorName,isTeacher,content,time});
-  save('message');closeM('modal-reply');renderMsgBoard();
+  if(window.fb) window.fb.saveMessage(m).then(()=>console.log('✅ 댓글 저장됨'));closeM('modal-reply');renderMsgBoard();
   // 댓글 달고 다시 상세 열기
   setTimeout(()=>openMsgDetail(currentMsgId),100);
 }
@@ -1746,7 +1727,7 @@ function submitReq(){
   const s=DB.students.find(x=>x.id===curSid);
   const newReq={id:'req'+Date.now(),studentId:curSid,studentName:s?s.name:'',type:document.getElementById('req-type').value,reason,date:new Date().toLocaleDateString('ko-KR'),read:false};
   DB.requests.push(newReq);
-  save();if(window.fb) window.fb.saveRequest(newReq);closeM('modal-req');alert('신청이 완료됐어요! 선생님께 전달됩니다 😊');
+  if(window.fb) window.fb.saveRequest(newReq);closeM('modal-req');alert('신청이 완료됐어요! 선생님께 전달됩니다 😊');
 }
 
 // ═══════════════════════════════════════════
@@ -1793,9 +1774,9 @@ function saveEv(){
   const memo=document.getElementById('ev-memo').value.trim();
   if(editEvId){const ev=DB.events.find(x=>x.id===editEvId);if(ev){ev.date=date;ev.name=name;ev.memo=memo;}}
   else DB.events.push({id:'e'+Date.now(),date,name,memo});
-  save();saveConfig();closeM('modal-ev');renderSchedule();if(isAdmin&&admTab_==='schedule') renderAdmContent();
+  saveConfig();closeM('modal-ev');renderSchedule();if(isAdmin&&admTab_==='schedule') renderAdmContent();
 }
-function delEv(id){if(!confirm('삭제하시겠습니까?')) return;DB.events=DB.events.filter(x=>x.id!==id);save();saveConfig();renderSchedule();if(isAdmin&&admTab_==='schedule') renderAdmContent();}
+function delEv(id){if(!confirm('삭제하시겠습니까?')) return;DB.events=DB.events.filter(x=>x.id!==id);saveConfig();renderSchedule();if(isAdmin&&admTab_==='schedule') renderAdmContent();}
 
 // ═══════════════════════════════════════════
 // ADMIN
@@ -2080,7 +2061,7 @@ function renderAdmSchedule(c){
     <button class="del-btn" onclick="delEvAdm('${ev.id}')">삭제</button>
   </div>`).join('')}</div>`;
 }
-function delEvAdm(id){if(!confirm('삭제하시겠습니까?')) return;DB.events=DB.events.filter(x=>x.id!==id);save();saveConfig();renderAdmContent();}
+function delEvAdm(id){if(!confirm('삭제하시겠습니까?')) return;DB.events=DB.events.filter(x=>x.id!==id);saveConfig();renderAdmContent();}
 
 // ── Requests
 function renderAdmRequests(c){
@@ -2096,7 +2077,7 @@ function renderAdmRequests(c){
     <button class="del-btn" style="margin-top:7px" onclick="delReq('${r.id}')">삭제</button>
   </div>`).join('');
 }
-function delReq(id){DB.requests=DB.requests.filter(x=>x.id!==id);save();if(window.fb) window.fb.deleteRequest(id);renderAdmContent();}
+function delReq(id){DB.requests=DB.requests.filter(x=>x.id!==id);if(window.fb) window.fb.deleteRequest(id);renderAdmContent();}
 
 // ── Notice
 function renderAdmNotice(c){
@@ -2135,7 +2116,7 @@ function saveNotice(){
   const idx=parseInt(document.getElementById('notice-edit-idx').value);
   if(idx>=0) DB.notices[idx]={title,content};
   else DB.notices.push({title,content});
-  save();saveConfig();alert('공지가 저장됐습니다!');renderAdmContent();
+  saveConfig();alert('공지가 저장됐습니다!');renderAdmContent();
 }
 function editNotice(i){
   const n=(DB.notices||[])[i];if(!n) return;
@@ -2181,7 +2162,7 @@ function changeAdminPw(){
   const cur=document.getElementById('cur-apw').value,nw=document.getElementById('new-apw').value,nw2=document.getElementById('new-apw2').value;
   if(cur!==DB.adminPw){alert('현재 비밀번호가 틀렸습니다');return}
   if(!nw||nw!==nw2){alert('새 비밀번호를 확인해주세요');return}
-  DB.adminPw=nw;save();saveConfig();alert('비밀번호 변경 완료!');
+  DB.adminPw=nw;saveConfig();alert('비밀번호 변경 완료!');
 }
 
 // ═══════════════════════════════════════════
