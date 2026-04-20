@@ -228,9 +228,12 @@ textarea{resize:vertical;min-height:80px}
 
   async function saveStudent(student) {
     try {
-      // merge:true = 전체 덮어쓰기 대신 변경된 필드만 업데이트
-      await setDoc(doc(STUDENTS_COL, String(student.id)), student, { merge: true });
-      console.log('✅ 학생 저장:', student.name);
+      await setDoc(doc(STUDENTS_COL, String(student.id)), student);
+      // 로컬 DB도 즉시 업데이트
+      const idx = window.DB.students.findIndex(x => x.id == student.id);
+      if (idx >= 0) window.DB.students[idx] = student;
+      DB = window.DB;
+      console.log('✅ 학생 저장 완료:', student.name);
     } catch(e) {
       console.warn('student 저장 실패:', e);
     }
@@ -318,62 +321,10 @@ textarea{resize:vertical;min-height:80px}
     if (ov) { ov.style.opacity='0'; ov.style.transition='opacity .3s'; setTimeout(()=>ov.remove(), 300); }
   }
 
-  // ── 실시간 동기화 (개별 컬렉션) ──
+  // ── 실시간 동기화 비활성화 (저장 충돌 방지) ──
+  // onSnapshot 대신 저장 후 즉시 반영 방식 사용
   function startSync() {
-    // config 변경 감지
-    onSnapshot(CONFIG_REF, (snap) => {
-      if (!snap.exists()) return;
-      const c = snap.data();
-      window.DB.adminPw = c.adminPw || window.DB.adminPw;
-      window.DB.notice = c.notice || '';
-      window.DB.notices = c.notices || [];
-      window.DB.events = c.events || [];
-      if (c.regularClasses && c.regularClasses.length > 0) window.DB.regularClasses = c.regularClasses;
-      if (c.trainingSlots && c.trainingSlots.length > 0) window.DB.trainingSlots = c.trainingSlots;
-      DB = window.DB;
-      if (window.renderMain) window.renderMain();
-    });
-
-    // 학생 컬렉션 변경 감지 (변경된 학생만 업데이트)
-    let syncTimeout = null;
-    onSnapshot(STUDENTS_COL, (snap) => {
-      const profileActive = document.getElementById('page-profile')?.classList.contains('active');
-      let changed = false;
-
-      snap.docChanges().forEach(change => {
-        const s = change.doc.data();
-        if (change.type === 'removed') {
-          window.DB.students = window.DB.students.filter(x => x.id != s.id);
-          changed = true;
-        } else {
-          // 현재 내가 편집 중인 학생이면 클래스 데이터는 스킵
-          if (profileActive && window.curSid == s.id) {
-            // 이름/전공 등 기본 정보만 업데이트, classes는 내 것 유지
-            const myStudent = window.DB.students.find(x => x.id == s.id);
-            if (myStudent) {
-              // classes, goals, inbody는 내 것 유지
-              s.classes = myStudent.classes;
-              s.goals = myStudent.goals;
-            }
-          }
-          const idx = window.DB.students.findIndex(x => x.id == s.id);
-          if (idx >= 0) window.DB.students[idx] = s;
-          else window.DB.students.push(s);
-          changed = true;
-        }
-      });
-
-      if (!changed) return;
-      window.DB.students.sort((a,b) => a.name.localeCompare(b.name, 'ko'));
-      DB = window.DB;
-
-      if (!profileActive) {
-        clearTimeout(syncTimeout);
-        syncTimeout = setTimeout(() => { if(window.renderMain) window.renderMain(); }, 300);
-      }
-    });
-
-    // 메시지 변경 감지 (변경된 것만 업데이트)
+    // 메시지/공지만 실시간 동기화 (학생 데이터는 충돌 위험으로 제외)
     onSnapshot(MESSAGES_COL, (snap) => {
       snap.docChanges().forEach(change => {
         const m = change.doc.data();
@@ -387,10 +338,10 @@ textarea{resize:vertical;min-height:80px}
       });
       window.DB.messages.sort((a,b) => a.id.localeCompare(b.id));
       DB = window.DB;
-      if (window.renderMain) window.renderMain();
+      const mainActive = document.getElementById('page-main')?.classList.contains('active');
+      if (mainActive && window.renderMain) window.renderMain();
     });
 
-    // 신청 변경 감지 (변경된 것만 업데이트)
     onSnapshot(REQUESTS_COL, (snap) => {
       snap.docChanges().forEach(change => {
         const r = change.doc.data();
@@ -403,11 +354,25 @@ textarea{resize:vertical;min-height:80px}
         }
       });
       DB = window.DB;
-      if (window.renderMain) window.renderMain();
     });
+
+    onSnapshot(CONFIG_REF, (snap) => {
+      if (!snap.exists()) return;
+      const c = snap.data();
+      window.DB.adminPw = c.adminPw || window.DB.adminPw;
+      window.DB.notice = c.notice || '';
+      window.DB.notices = c.notices || [];
+      window.DB.events = c.events || [];
+      if (c.regularClasses && c.regularClasses.length > 0) window.DB.regularClasses = c.regularClasses;
+      if (c.trainingSlots && c.trainingSlots.length > 0) window.DB.trainingSlots = c.trainingSlots;
+      DB = window.DB;
+    });
+
+    // 학생 데이터는 실시간 동기화 없음 - 저장 시 즉시 반영
+    console.log('✅ 동기화 시작 (메시지/공지만 실시간)');
   }
 
-  // ── 전역 노출 ──
+    // ── 전역 노출 ──
   window.fb = {
     saveConfig,
     saveStudent,
