@@ -363,8 +363,8 @@ textarea{resize:vertical;min-height:80px}
       window.DB.notice = c.notice || '';
       window.DB.notices = c.notices || [];
       window.DB.events = c.events || [];
-      if (c.regularClasses && c.regularClasses.length > 0) window.DB.regularClasses = c.regularClasses;
-      if (c.trainingSlots && c.trainingSlots.length > 0) window.DB.trainingSlots = c.trainingSlots;
+      // regularClasses/trainingSlots는 onSnapshot으로 업데이트 안 함 (덮어쓰기 방지)
+      // 수업 목록은 로드 시에만 가져옴
       DB = window.DB;
     });
 
