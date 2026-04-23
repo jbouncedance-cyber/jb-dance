@@ -1482,14 +1482,78 @@ function saveMajor(){
 // Inbody
 function renderIbTable(s){
   if(!s.inbody||!s.inbody.length) return '<div class="empty-msg" style="padding:18px">측정 기록이 없습니다</div>';
-  return `<table class="ib-table">
+  const sorted=[...s.inbody].sort((a,b)=>a.date.localeCompare(b.date));
+  const latest=sorted[sorted.length-1];
+  const prev=sorted.length>1?sorted[sorted.length-2]:null;
+
+  // 변화량 계산
+  const diff=(a,b)=>{if(!b) return '';const d=(a-b).toFixed(1);return d>0?`<span style="color:var(--red);font-size:10px">▲${d}</span>`:`<span style="color:var(--green);font-size:10px">▼${Math.abs(d)}</span>`;};
+  const scoreDiff=(a,b)=>{if(!b) return '';const d=a-b;return d>0?`<span style="color:var(--green);font-size:10px">▲${d}</span>`:`<span style="color:var(--red);font-size:10px">▼${Math.abs(d)}</span>`;};
+
+  // 미니 차트 (최근 6개)
+  const chartData=sorted.slice(-6);
+  const maxW=Math.max(...chartData.map(r=>r.weight||0));
+  const minW=Math.min(...chartData.map(r=>r.weight||0));
+  const range=maxW-minW||1;
+
+  let html='';
+
+  // 최신 vs 이전 비교 카드
+  if(prev){
+    html+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;padding:12px 12px 8px;border-bottom:1px solid var(--border)">
+      ${[
+        {label:'점수',cur:latest.score,prv:prev.score,unit:'',higher:true},
+        {label:'체중',cur:latest.weight,prv:prev.weight,unit:'kg',higher:false},
+        {label:'골격근',cur:latest.muscle,prv:prev.muscle,unit:'kg',higher:true},
+        {label:'체지방',cur:latest.fat,prv:prev.fat,unit:'kg',higher:false},
+      ].map(item=>{
+        const d=(item.cur-item.prv).toFixed(1);
+        const isGood=item.higher?(d>0):(d<0);
+        const color=d==0?'var(--gray)':isGood?'var(--green)':'var(--red)';
+        const arrow=d==0?'':d>0?'▲':'▼';
+        return `<div style="background:var(--light);border-radius:9px;padding:8px 6px;text-align:center">
+          <div style="font-size:10px;color:var(--gray);margin-bottom:3px">${item.label}</div>
+          <div style="font-size:15px;font-weight:900">${item.cur}${item.unit}</div>
+          <div style="font-size:11px;color:${color};font-weight:700">${arrow}${Math.abs(d)}${item.unit}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  // 체중 미니 그래프
+  if(chartData.length>1){
+    const w=280,h=50,pad=8;
+    const pts=chartData.map((r,i)=>{
+      const x=pad+i*(w-2*pad)/(chartData.length-1);
+      const y=h-pad-(r.weight-minW)/range*(h-2*pad);
+      return `${x},${y}`;
+    }).join(' ');
+    html+=`<div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--gray);margin-bottom:4px;font-weight:700">📈 체중 변화</div>
+      <svg width="100%" viewBox="0 0 ${w} ${h}" style="overflow:visible">
+        <polyline points="${pts}" fill="none" stroke="var(--pink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        ${chartData.map((r,i)=>{
+          const x=pad+i*(w-2*pad)/(chartData.length-1);
+          const y=h-pad-(r.weight-minW)/range*(h-2*pad);
+          return `<circle cx="${x}" cy="${y}" r="3" fill="var(--pink)"/>
+          <text x="${x}" y="${y-6}" text-anchor="middle" font-size="9" fill="var(--gray)">${r.weight}</text>
+          <text x="${x}" y="${h}" text-anchor="middle" font-size="8" fill="var(--gray2)">${r.date.slice(5)}</text>`;
+        }).join('')}
+      </svg>
+    </div>`;
+  }
+
+  // 전체 기록 테이블
+  html+=`<div style="overflow-x:auto"><table class="ib-table">
     <thead><tr><th>날짜</th><th>점수</th><th>체중</th><th>골격근</th><th>체지방</th><th>사진</th></tr></thead>
-    <tbody>${[...s.inbody].reverse().map(r=>`<tr>
-      <td style="white-space:nowrap">${r.date}</td>
+    <tbody>${[...sorted].reverse().map(r=>`<tr>
+      <td style="white-space:nowrap;font-size:12px">${r.date}</td>
       <td><span class="badge ${r.score>=80?'green':r.score>=60?'amber':'red'}">${r.score}</span></td>
       <td>${r.weight}kg</td><td>${r.muscle}kg</td><td>${r.fat}kg</td>
       <td>${r.img?`<img src="${r.img}" style="width:34px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="bigImg('${r.img}')">`:'-'}</td>
-    </tr>`).join('')}</tbody></table>`;
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+  return html;
 }
 function openIbModal(id){
   curSid=id;
@@ -1504,7 +1568,13 @@ function saveIb(){
   const e={date:document.getElementById('ib-date').value,score:parseFloat(document.getElementById('ib-score').value)||0,weight:parseFloat(document.getElementById('ib-weight').value)||0,muscle:parseFloat(document.getElementById('ib-muscle').value)||0,fat:parseFloat(document.getElementById('ib-fat').value)||0,img:document.getElementById('ib-img-prev').src||''};
   if(!e.date||!e.score){alert('날짜와 점수를 입력해주세요');return}
   if(!s.inbody)s.inbody=[];s.inbody.push(e);s.inbody.sort((a,b)=>a.date.localeCompare(b.date));
-  save('student',s.id);closeM('modal-ib');renderProfile(s);
+  closeM('modal-ib');
+  if(window.fb){
+    window.fb.saveStudent(s).then(()=>{
+      showToast('✅ 인바디 저장 완료!');
+    }).catch(()=>showToast('❌ 저장 실패, 다시 시도해주세요'));
+  }
+  renderProfile(s);
   const ibt2=document.getElementById('ib-table-'+s.id);
   if(ibt2) ibt2.innerHTML=renderIbTable(s);
 }
@@ -2145,6 +2215,14 @@ function changeAdminPw(){
 // ═══════════════════════════════════════════
 // UTILS
 // ═══════════════════════════════════════════
+function showToast(msg,duration=2500){
+  let t=document.getElementById('_toast');
+  if(!t){t=document.createElement('div');t.id='_toast';
+    t.style.cssText='position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:10px 22px;border-radius:22px;font-size:14px;font-weight:700;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap';
+    document.body.appendChild(t);}
+  t.textContent=msg;t.style.opacity='1';
+  clearTimeout(t._t);t._t=setTimeout(()=>{t.style.opacity='0';},duration);
+}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function openM(id){document.getElementById(id).classList.add('active');}
 function closeM(id){document.getElementById(id).classList.remove('active');}
