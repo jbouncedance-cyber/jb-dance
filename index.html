@@ -189,8 +189,7 @@ textarea{resize:vertical;min-height:80px}
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
   import {
     getFirestore, doc, collection,
-    getDoc, getDocs, setDoc, deleteDoc, updateDoc,
-    onSnapshot, writeBatch, serverTimestamp
+    getDoc, getDocs, setDoc, deleteDoc, onSnapshot
   } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -205,13 +204,26 @@ textarea{resize:vertical;min-height:80px}
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
-  // 컬렉션 참조
-  const CONFIG_REF = doc(db, 'jbdance', 'config');
+  const CONFIG_REF  = doc(db, 'jbdance', 'config');
   const STUDENTS_COL = collection(db, 'jbdance_students');
   const MESSAGES_COL = collection(db, 'jbdance_messages');
   const REQUESTS_COL = collection(db, 'jbdance_requests');
 
-  // ── 저장 함수들 ──
+  // ══════════════════════════════════════
+  // 저장 함수들 (쓰기만)
+  // ══════════════════════════════════════
+  async function saveStudent(s) {
+    try {
+      await setDoc(doc(STUDENTS_COL, String(s.id)), s);
+      console.log('✅ 학생 저장:', s.name);
+    } catch(e) { console.warn('학생 저장 실패:', e); }
+  }
+
+  async function deleteStudent(id) {
+    try { await deleteDoc(doc(STUDENTS_COL, String(id))); } 
+    catch(e) { console.warn('학생 삭제 실패:', e); }
+  }
+
   async function saveConfig() {
     try {
       await setDoc(CONFIG_REF, {
@@ -223,108 +235,88 @@ textarea{resize:vertical;min-height:80px}
         trainingSlots: window.DB.trainingSlots || [],
         updatedAt: Date.now()
       });
+      console.log('✅ config 저장');
     } catch(e) { console.warn('config 저장 실패:', e); }
   }
 
-  async function saveStudent(student) {
-    try {
-      await setDoc(doc(STUDENTS_COL, String(student.id)), student);
-      // 로컬 DB도 즉시 업데이트
-      const idx = window.DB.students.findIndex(x => x.id == student.id);
-      if (idx >= 0) window.DB.students[idx] = student;
-      DB = window.DB;
-      console.log('✅ 학생 저장 완료:', student.name);
-    } catch(e) {
-      console.warn('student 저장 실패:', e);
-    }
-  }
-
-  async function deleteStudent(id) {
-    try {
-      await deleteDoc(doc(STUDENTS_COL, String(id)));
-    } catch(e) { console.warn('student 삭제 실패:', e); }
-  }
-
-  async function saveMessage(message) {
-    try {
-      await setDoc(doc(MESSAGES_COL, String(message.id)), message, { merge: true });
-    } catch(e) { console.warn('message 저장 실패:', e); }
+  async function saveMessage(m) {
+    try { await setDoc(doc(MESSAGES_COL, String(m.id)), m); }
+    catch(e) { console.warn('메시지 저장 실패:', e); }
   }
 
   async function deleteMessage(id) {
-    try {
-      await deleteDoc(doc(MESSAGES_COL, String(id)));
-    } catch(e) { console.warn('message 삭제 실패:', e); }
+    try { await deleteDoc(doc(MESSAGES_COL, String(id))); }
+    catch(e) { console.warn('메시지 삭제 실패:', e); }
   }
 
-  async function saveRequest(request) {
-    try {
-      await setDoc(doc(REQUESTS_COL, String(request.id)), request);
-    } catch(e) { console.warn('request 저장 실패:', e); }
+  async function saveRequest(r) {
+    try { await setDoc(doc(REQUESTS_COL, String(r.id)), r); }
+    catch(e) { console.warn('신청 저장 실패:', e); }
   }
 
   async function deleteRequest(id) {
-    try {
-      await deleteDoc(doc(REQUESTS_COL, String(id)));
-    } catch(e) { console.warn('request 삭제 실패:', e); }
+    try { await deleteDoc(doc(REQUESTS_COL, String(id))); }
+    catch(e) { console.warn('신청 삭제 실패:', e); }
   }
 
-  // ── 전체 로드 ──
+  // ══════════════════════════════════════
+  // 전체 로드 (앱 시작시 1회)
+  // ══════════════════════════════════════
   async function loadAll() {
     try {
-
       // config 로드
-      const configSnap = await getDoc(CONFIG_REF);
-      if (configSnap.exists()) {
-        const c = configSnap.data();
-        window.DB.adminPw = c.adminPw || window.DB.adminPw;
-        window.DB.notice = c.notice || '';
-        window.DB.notices = c.notices || [];
-        window.DB.events = c.events || [];
-        // 수업 목록이 저장되어 있으면 불러오기
-        if (c.regularClasses && c.regularClasses.length > 0) window.DB.regularClasses = c.regularClasses;
-        if (c.trainingSlots && c.trainingSlots.length > 0) window.DB.trainingSlots = c.trainingSlots;
+      const cSnap = await getDoc(CONFIG_REF);
+      if (cSnap.exists()) {
+        const c = cSnap.data();
+        window.DB.adminPw    = c.adminPw || window.DB.adminPw;
+        window.DB.notice     = c.notice  || '';
+        window.DB.notices    = c.notices || [];
+        window.DB.events     = c.events  || [];
+        if (c.regularClasses  && c.regularClasses.length)  window.DB.regularClasses  = c.regularClasses;
+        if (c.trainingSlots   && c.trainingSlots.length)   window.DB.trainingSlots   = c.trainingSlots;
       } else {
         await saveConfig();
       }
 
       // 학생 로드
-      const studentsSnap = await getDocs(STUDENTS_COL);
-      if (!studentsSnap.empty) {
+      const sSnap = await getDocs(STUDENTS_COL);
+      if (!sSnap.empty) {
         window.DB.students = [];
-        studentsSnap.forEach(d => window.DB.students.push(d.data()));
-        window.DB.students.sort((a,b) => a.name.localeCompare(b.name, 'ko'));
+        sSnap.forEach(d => window.DB.students.push(d.data()));
+        window.DB.students.sort((a,b) => a.name.localeCompare(b.name,'ko'));
       } else {
-        // 최초: 코드 기본값 저장
         for (const s of window.DB.students) await saveStudent(s);
       }
 
       // 메시지 로드
-      const msgsSnap = await getDocs(MESSAGES_COL);
+      const mSnap = await getDocs(MESSAGES_COL);
       window.DB.messages = [];
-      msgsSnap.forEach(d => window.DB.messages.push(d.data()));
+      mSnap.forEach(d => window.DB.messages.push(d.data()));
       window.DB.messages.sort((a,b) => a.id.localeCompare(b.id));
 
       // 신청 로드
-      const reqsSnap = await getDocs(REQUESTS_COL);
+      const rSnap = await getDocs(REQUESTS_COL);
       window.DB.requests = [];
-      reqsSnap.forEach(d => window.DB.requests.push(d.data()));
+      rSnap.forEach(d => window.DB.requests.push(d.data()));
 
       DB = window.DB;
-      console.log('✅ Firebase 전체 로드 완료');
+      localStorage.setItem('jbd4', JSON.stringify(DB));
+      console.log('✅ 전체 로드 완료 - 학생', window.DB.students.length, '명');
     } catch(e) {
-      console.warn('Firebase 로드 실패:', e);
+      console.warn('Firebase 로드 실패 (오프라인?):', e);
     }
+
     if (window.renderMain) window.renderMain();
     // 로딩 오버레이 제거
     const ov = document.getElementById('loading-overlay');
     if (ov) { ov.style.opacity='0'; ov.style.transition='opacity .3s'; setTimeout(()=>ov.remove(), 300); }
   }
 
-  // ── 실시간 동기화 비활성화 (저장 충돌 방지) ──
-  // onSnapshot 대신 저장 후 즉시 반영 방식 사용
-  function startSync() {
-    // 메시지/공지만 실시간 동기화 (학생 데이터는 충돌 위험으로 제외)
+  // ══════════════════════════════════════
+  // 메시지만 실시간 동기화 (onSnapshot)
+  // 학생/config는 onSnapshot 없음 → 덮어쓰기 방지
+  // ══════════════════════════════════════
+  function startMessageSync() {
     onSnapshot(MESSAGES_COL, (snap) => {
       snap.docChanges().forEach(change => {
         const m = change.doc.data();
@@ -354,42 +346,23 @@ textarea{resize:vertical;min-height:80px}
         }
       });
       DB = window.DB;
+      if (window.updAlertDot) window.updAlertDot();
     });
-
-    onSnapshot(CONFIG_REF, (snap) => {
-      if (!snap.exists()) return;
-      const c = snap.data();
-      window.DB.adminPw = c.adminPw || window.DB.adminPw;
-      window.DB.notice = c.notice || '';
-      window.DB.notices = c.notices || [];
-      window.DB.events = c.events || [];
-      // regularClasses/trainingSlots는 onSnapshot으로 업데이트 안 함 (덮어쓰기 방지)
-      // 수업 목록은 로드 시에만 가져옴
-      DB = window.DB;
-    });
-
-    // 학생 데이터는 실시간 동기화 없음 - 저장 시 즉시 반영
-    console.log('✅ 동기화 시작 (메시지/공지만 실시간)');
   }
 
-    // ── 전역 노출 ──
-  window.fb = {
-    saveConfig,
-    saveStudent,
-    deleteStudent,
-    saveMessage,
-    deleteMessage,
-    saveRequest,
-    deleteRequest,
-  };
+  // ══════════════════════════════════════
+  // 전역 노출
+  // ══════════════════════════════════════
+  window.fb = { saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest };
 
   // 앱 시작
   window.addEventListener('load', async () => {
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 200));
     await loadAll();
-    startSync();
+    startMessageSync();
   });
 </script>
+
 
 
 
@@ -854,19 +827,12 @@ window.DB = {
   requests:[],
   messages:[]
 };
-function save(type, id){
-  localStorage.setItem('jbd4',JSON.stringify(window.DB));
-  if(!window.fb) return;
-  if(type==='student'){
-    const s=window.DB.students.find(x=>x.id===id)||window.DB.students.find(x=>x.id===curSid);
-    if(s) window.fb.saveStudent(s);
-  } else if(type==='config'){
-    window.fb.saveConfig();
-  }
+function save(){
+  localStorage.setItem('jbd4', JSON.stringify(window.DB));
 }
 
-function saveConfig(){ if(window.fb) window.fb.saveConfig(); }
-function saveStudent(s){ if(window.fb&&s) window.fb.saveStudent(s); }
+function saveConfig(){ save(); if(window.fb) window.fb.saveConfig(); }
+function saveStudent(s){ save(); if(window.fb&&s) window.fb.saveStudent(s); }
 function fbDeleteStudent(id){ if(window.fb) window.fb.deleteStudent(id); }
 
 function showPage(id){
@@ -877,6 +843,7 @@ function showPage(id){
 }
 function renderMain(){renderNoticeBar();renderMsgBoard();renderStudentList();updAlertDot();}
 function updAlertDot(){const n=DB.requests.filter(r=>!r.read).length;const d=document.getElementById('main-alert');if(d)d.style.display=n?'inline':'none';}
+window.updAlertDot=updAlertDot;
 
 // ═══════════════════════════════════════════
 // NOTICE
@@ -1748,7 +1715,7 @@ function saveClsSel(){
   if(!s.classes)s.classes={};
   s.classes[curSlotKey]=selClsId;
   closeM('modal-cls');renderProfile(s);renderStudentList();
-  // 디바운스: 3초 안에 여러 수업 선택해도 마지막 것만 Firebase 저장
+  // 디바운스: 마지막 수업 선택 후 Firebase 저장
   clearTimeout(_saveStudentTimer);
   _saveStudentTimer=setTimeout(()=>{
     const latest=DB.students.find(x=>x.id===curSid);
