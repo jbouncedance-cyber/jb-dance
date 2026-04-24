@@ -303,6 +303,13 @@ textarea{resize:vertical;min-height:80px}
       window.DB.requests = [];
       rSnap.forEach(d => window.DB.requests.push(d.data()));
 
+      // 영상/지식 로드
+      try {
+        const resSnap = await getDocs(collection(db, 'jbdance_resources'));
+        window.DB.resources = [];
+        resSnap.forEach(d => window.DB.resources.push(d.data()));
+      } catch(e) { window.DB.resources = []; }
+
       DB = window.DB;
       localStorage.setItem('jbd4', JSON.stringify(DB));
       console.log('✅ 전체 로드 완료 - 학생', window.DB.students.length, '명');
@@ -394,6 +401,7 @@ textarea{resize:vertical;min-height:80px}
   </div>
   <div class="content">
     <div id="notice-bar-wrap"></div>
+    <div id="resource-board-wrap"></div>
     <div id="message-board-wrap"></div>
     <div id="student-list-wrap"></div>
   </div>
@@ -499,6 +507,7 @@ textarea{resize:vertical;min-height:80px}
     <button class="tab-btn" onclick="admTab(this,'schedule')">스케줄</button>
     <button class="tab-btn" onclick="admTab(this,'requests')">신청<span class="unread-cnt" id="req-badge" style="display:none">0</span></button>
     <button class="tab-btn" onclick="admTab(this,'notice')">공지</button>
+    <button class="tab-btn" onclick="admTab(this,'resource')">영상/지식</button>
     <button class="tab-btn" onclick="admTab(this,'settings')">설정</button>
   </div>
   <div class="content" id="admin-content" style="padding-top:9px"></div>
@@ -845,7 +854,7 @@ function showPage(id){
   if(id==='page-main') renderMain();
   if(id==='page-schedule') renderSchedule();
 }
-function renderMain(){renderNoticeBar();renderMsgBoard();renderStudentList();updAlertDot();}
+function renderMain(){renderNoticeBar();renderResourceBoard();renderMsgBoard();renderStudentList();updAlertDot();}
 function updAlertDot(){const n=DB.requests.filter(r=>!r.read).length;const d=document.getElementById('main-alert');if(d)d.style.display=n?'inline':'none';}
 window.updAlertDot=updAlertDot;
 
@@ -884,7 +893,9 @@ const POSTIT_COLORS=['#fef08a','#bbf7d0','#bfdbfe','#fecdd3','#e9d5ff','#fed7aa'
 function renderMsgBoard(){
   const w=document.getElementById('message-board-wrap');
   if(!w) return;
-  const msgs=(DB.messages||[]).slice().reverse().slice(0,20);
+  const msgs=(DB.messages||[]).slice().reverse().slice(0,50);
+  const showAll=window._msgShowAll||false;
+  const displayMsgs=showAll?msgs:msgs.slice(0,6);
   w.innerHTML=`<div style="margin-bottom:10px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:0 2px">
       <div>
@@ -896,12 +907,12 @@ function renderMsgBoard(){
     ${!msgs.length
       ?`<div style="background:var(--white);border-radius:12px;border:1px solid var(--border);padding:20px;text-align:center;font-size:13px;color:var(--gray)">첫 한마디를 남겨보세요! 😊</div>`
       :`<div class="postit-wrap">
-        ${msgs.map((m,i)=>{
+        ${displayMsgs.map((m,i)=>{
           const col=POSTIT_COLORS[i%POSTIT_COLORS.length];
           const replies=(m.replies||[]).length;
           const isTeacher=m.isTeacher;
-          return `<div class="postit" style="background:${col};transform:rotate(${(i%3-1)*1.5}deg)" onclick="openMsgDetail('${m.id}')">
-            <div class="postit-author" style="color:${isTeacher?'var(--pink)':'var(--black)'}">${isTeacher?'👑 ':''}${esc(m.author)}</div>
+          return `<div class="postit postit-colors" style="background:${col}" onclick="openMsgDetail('${m.id}')">
+            <div class="postit-author" style="color:${isTeacher?'#b5156d':'#333'}">${isTeacher?'👑 ':''}${esc(m.author)}</div>
             <div class="postit-content">${esc(m.content).replace(/\n/g,'<br>')}</div>
             <div class="postit-footer">
               <span class="postit-time">${m.time}</span>
@@ -909,10 +920,16 @@ function renderMsgBoard(){
             </div>
           </div>`;
         }).join('')}
-      </div>`
+      </div>
+      ${msgs.length>6?`<div style="text-align:center;margin-top:8px">
+        <button onclick="window._msgShowAll=!window._msgShowAll;renderMsgBoard()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:6px 18px;font-size:12px;color:var(--gray);cursor:pointer;font-family:inherit">
+          ${showAll?'▲ 접기':'▼ 더보기 ('+( msgs.length-6)+'개 더)'}
+        </button>
+      </div>`:''}`
     }
   </div>`;
 }
+
 
 // 포스트잇 상세 (댓글 보기)
 let currentMsgId=null;
@@ -1833,6 +1850,7 @@ function renderAdmContent(){
   else if(admTab_==='schedule') renderAdmSchedule(c);
   else if(admTab_==='requests') renderAdmRequests(c);
   else if(admTab_==='notice') renderAdmNotice(c);
+  else if(admTab_==='resource') renderAdmResource(c);
   else if(admTab_==='settings') renderAdmSettings(c);
 }
 function updReqBadge(){const n=DB.requests.filter(r=>!r.read).length;const b=document.getElementById('req-badge');if(b){b.style.display=n?'inline':'none';b.textContent=n;}}
@@ -2127,6 +2145,51 @@ function renderAdmRequests(c){
 function delReq(id){DB.requests=DB.requests.filter(x=>x.id!==id);if(window.fb) window.fb.deleteRequest(id);renderAdmContent();}
 
 // ── Notice
+function renderAdmResource(c){
+  const resources=DB.resources||[];
+  c.innerHTML=`
+  <div class="adm-section" style="margin-bottom:12px">
+    <div style="padding:10px 13px;background:var(--pink-bg);border-bottom:1px solid var(--border);font-weight:800;font-size:13px;color:var(--pink)">🎬 등록된 영상/지식 ${resources.length}개</div>
+    ${!resources.length?'<div class="empty-msg" style="padding:16px">등록된 항목이 없습니다</div>':
+    [...resources].reverse().map(r=>`<div class="adm-row">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:13px">${esc(r.title)}</div>
+        ${r.url?`<div style="font-size:11px;color:var(--blue);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.url)}</div>`:''}
+      </div>
+      <button class="del-btn" onclick="delResource('${r.id}')">삭제</button>
+    </div>`).join('')}
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="card-title">+ 새 영상/지식 추가</div></div>
+    <div class="card-body">
+      <div class="form-row"><label class="form-label">제목 *</label><input type="text" id="res-title" placeholder="예: 힙합 기초 - 락킹 입문 영상"></div>
+      <div class="form-row"><label class="form-label">URL (유튜브/링크)</label><input type="url" id="res-url" placeholder="https://youtube.com/..."></div>
+      <div class="form-row"><label class="form-label">설명</label><textarea id="res-desc" placeholder="간단한 설명을 입력하세요" style="min-height:70px"></textarea></div>
+      <button class="btn btn-pink" onclick="addResource()">추가하기</button>
+    </div>
+  </div>`;
+}
+function addResource(){
+  const title=document.getElementById('res-title').value.trim();
+  const url=document.getElementById('res-url').value.trim();
+  const desc=document.getElementById('res-desc').value.trim();
+  if(!title){alert('제목을 입력해주세요');return}
+  if(!DB.resources) DB.resources=[];
+  const now=new Date();
+  const time=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const r={id:'res'+Date.now(),title,url,desc,time};
+  DB.resources.push(r);
+  if(window.fb) window.fb.saveResource(r);
+  showToast('✅ 추가 완료!');
+  renderAdmContent();
+}
+function delResource(id){
+  if(!confirm('삭제하시겠습니까?')) return;
+  DB.resources=(DB.resources||[]).filter(x=>x.id!==id);
+  if(window.fb) window.fb.deleteResource(id);
+  renderAdmContent();
+}
+
 function renderAdmNotice(c){
   const notices=DB.notices||[];
   c.innerHTML=`
