@@ -983,6 +983,45 @@ function saveConfig(){ save(); if(window.fb) window.fb.saveConfig(); }
 function saveStudent(s){ save(); if(window.fb&&s) window.fb.saveStudent(s); }
 function fbDeleteStudent(id){ if(window.fb) window.fb.deleteStudent(id); }
 
+function renderNoticeBar(){
+  var w=document.getElementById('notice-bar-wrap');
+  if(!w) return;
+  var notices=DB.notices||[];
+  if(!notices.length){w.innerHTML='';return;}
+  var showAll=window._noticeShowAll||false;
+  var display=showAll?notices:notices.slice(0,3);
+  var html='<div style="margin-bottom:10px">';
+  html+='<div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:6px;padding:0 2px">📢 공지사항</div>';
+  display.forEach(function(n,i){
+    html+='<div onclick="viewNotice('+i+')" style="background:var(--white);border:1px solid var(--border);border-left:3px solid var(--pink);border-radius:10px;padding:10px 13px;margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:10px">';
+    html+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:var(--pink)">'+esc(n.title)+'</div>';
+    html+='<div style="font-size:11px;color:var(--gray);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc((n.content||'').replace(/\n/g,' ').substring(0,40))+((n.content||'').length>40?'…':'')+'</div></div>';
+    html+='<div style="color:var(--gray2);font-size:18px;flex-shrink:0">›</div></div>';
+  });
+  if(notices.length>3){
+    html+='<div style="text-align:center;margin-top:4px"><button onclick="window._noticeShowAll=!window._noticeShowAll;renderNoticeBar()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:5px 16px;font-size:11px;color:var(--gray);cursor:pointer;font-family:inherit">'+(showAll?'▲ 접기':'▼ 더보기 ('+(notices.length-3)+'개 더)')+'</button></div>';
+  }
+  html+='</div>';
+  w.innerHTML=html;
+}
+
+function renderMain(){
+  renderNoticeBar();
+  renderResourceBoard();
+  renderMsgBoard();
+  renderStudentList();
+  updAlertDot();
+}
+window.renderMain=renderMain;
+
+function viewNotice(idx){
+  var n=(DB.notices||[])[idx];
+  if(!n) return;
+  document.getElementById('notice-view-title').textContent=n.title;
+  document.getElementById('notice-txt').textContent=n.content||'';
+  openM('modal-notice');
+}
+
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById(id).classList.add('active');
