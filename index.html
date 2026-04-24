@@ -1811,17 +1811,17 @@ function renderMonthlyGoalCard(s){
   parts.push('<div class="card">');
   parts.push('<div class="card-head"><div class="card-title">✨ '+ymLabel+' 목표</div></div>');
   parts.push('<div class="card-body">');
-  parts.push('<div class="form-row"><label class="form-label">이달 목표</label>');
-  parts.push('<textarea id="goal-monthly-'+s.id+'" placeholder="'+ymLabel+'에 이루고 싶은 것을 적어보세요" style="min-height:80px">'+esc(cur.goal)+'</textarea></div>');
-  // 달성률 슬라이더 (한줄, 색상)
+  parts.push('<div class="form-row"><label class="form-label" style="font-weight:800;color:var(--pink)">🎯 댄서로서의 목표</label>');
+  parts.push('<textarea id="goal-dancer-'+s.id+'" placeholder="댄서로서 궁극적인 목표를 적어보세요" style="min-height:70px">'+esc(s.goals&&s.goals.dancer||'')+'</textarea></div>');
+  parts.push('<div style="height:1px;background:var(--border);margin:4px 0 12px"></div>');
+  parts.push('<div class="form-row"><label class="form-label">'+ymLabel+' 목표</label>');
+  parts.push('<textarea id="goal-monthly-'+s.id+'" placeholder="'+ymLabel+'에 이루고 싶은 것을 적어보세요" style="min-height:70px">'+esc(cur.goal)+'</textarea></div>');
   parts.push('<div class="form-row"><label class="form-label">달성률 <span id="goal-pct-'+s.id+'" style="color:'+color+';font-weight:800">'+ach+'%</span></label>');
   parts.push('<div style="position:relative;height:22px;display:flex;align-items:center;margin-top:4px">');
   parts.push('<div style="position:absolute;width:100%;height:10px;background:var(--light);border-radius:5px;top:50%;transform:translateY(-50%)"></div>');
   parts.push('<div id="goal-bar-'+s.id+'" style="position:absolute;height:10px;background:'+color+';border-radius:5px;top:50%;transform:translateY(-50%);width:'+ach+'%;transition:width .1s,background .2s;pointer-events:none"></div>');
   parts.push('<input type="range" id="goal-ach-'+s.id+'" data-sid="'+s.id+'" min="0" max="100" value="'+ach+'" style="position:absolute;width:100%;opacity:0;cursor:pointer;z-index:2;height:22px;margin:0" oninput="goalRangeInput(this)" onchange="saveMonthlyAch('+s.id+',this.value)">');
   parts.push('</div></div>');
-  parts.push('<div class="form-row" style="margin-bottom:8px"><label class="form-label">댄서로서의 목표</label>');
-  parts.push('<textarea id="goal-dancer-'+s.id+'" placeholder="댄서로서 궁극적인 목표를 적어보세요">'+esc(s.goals&&s.goals.dancer||'')+'</textarea></div>');
   parts.push('<button class="btn btn-pink" onclick="saveMonthlyGoalBtn('+s.id+')" style="width:100%;margin-top:4px">저장하기</button>');
   // 지난 달 기록 (접혀있음)
   if(prev.length){
@@ -2112,8 +2112,10 @@ function saveMajor(){
 function renderTeacherMessages(s){
   var msgs=(s.teacherMessages||[]).slice().reverse();
   if(!msgs.length) return '';
+  var showAll=window['_tmShowAll_'+s.id]||false;
+  var display=showAll?msgs:msgs.slice(0,2);
   var parts=['<div class="card"><div class="card-head"><div class="card-title">💌 선생님의 한마디</div></div>'];
-  msgs.forEach(function(m){
+  display.forEach(function(m){
     var isNew=!m.read;
     var readFn='markTeacherMsgRead('+s.id+','+JSON.stringify(m.id)+')';
     parts.push('<div style="padding:12px 14px;border-bottom:1px solid var(--border);'+(isNew?'background:var(--pink-bg)':'')+'">' );
@@ -2125,11 +2127,24 @@ function renderTeacherMessages(s){
     if(isNew) parts.push('<button onclick="'+readFn+'" style="margin-top:8px;background:none;border:1px solid var(--pink);color:var(--pink);border-radius:8px;padding:4px 12px;font-size:11px;cursor:pointer;font-family:inherit">읽었어요 ✓</button>');
     parts.push('</div>');
   });
+  if(msgs.length>2){
+    var btnId='tm-more-btn-'+s.id;
+    parts.push('<div style="text-align:center;padding:8px">');
+    parts.push('<button data-sid="'+s.id+'" onclick="toggleTeacherMsgs(this)" style="background:none;border:1px solid var(--border);border-radius:20px;padding:5px 16px;font-size:11px;color:var(--gray);cursor:pointer;font-family:inherit">');
+    parts.push(showAll?'▲ 접기':'▼ 더보기 ('+(msgs.length-2)+'개 더)');
+    parts.push('</button></div>');
+  }
   parts.push('</div>');
   return parts.join('');
 }
 
 
+function toggleTeacherMsgs(el){
+  var sid=parseInt(el.getAttribute('data-sid'));
+  window['_tmShowAll_'+sid]=!window['_tmShowAll_'+sid];
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(s) renderProfile(s);
+}
 function markTeacherMsgRead(sid, msgId){
   const s=DB.students.find(function(x){return x.id===sid;});
   if(!s||!s.teacherMessages) return;
