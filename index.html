@@ -171,9 +171,9 @@ textarea{resize:vertical;min-height:80px}
 .reply-author{font-size:12px;font-weight:800;flex-shrink:0}
 .reply-content{font-size:12px;color:var(--black);line-height:1.5;flex:1}
 .reply-time{font-size:10px;color:var(--gray2);flex-shrink:0}
-input[type=range]{-webkit-appearance:none;appearance:none;height:6px;background:var(--light);border-radius:3px;outline:none}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--pink);cursor:pointer}
-input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--pink);cursor:pointer;border:none}
+input[type=range]{-webkit-appearance:none;appearance:none;height:8px;background:var(--light);border-radius:4px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--pink);cursor:pointer;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--pink);cursor:pointer;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 .img-upload-btn{display:block;width:100%;padding:10px;border:1.5px dashed var(--gray2);border-radius:9px;text-align:center;font-size:13px;color:var(--gray);cursor:pointer;background:var(--light);font-family:inherit;margin-bottom:3px}
 .img-preview{width:100%;border-radius:9px;border:1px solid var(--border);margin-top:5px;display:none}
 /* section title */
@@ -1030,6 +1030,98 @@ function renderMain(){
 }
 window.renderMain=renderMain;
 
+// ── 누락 함수 복구 ──
+var teacherMsgSid=null;
+var pickupWishSid=null;
+
+function goalRangeInput(el){
+  var sid=el.getAttribute('data-sid');
+  var v=parseInt(el.value)||0;
+  var pct=document.getElementById('goal-pct-'+sid);
+  var bar=document.getElementById('goal-bar-'+sid);
+  if(pct) pct.textContent=v+'%';
+  if(bar) bar.style.width=v+'%';
+  // range 자체 배경색도 업데이트
+  el.style.background='linear-gradient(to right, var(--pink) '+v+'%, var(--light) '+v+'%)';
+}
+
+function weeklyToggle(el){
+  var sid=parseInt(el.getAttribute('data-sid'));
+  var wi=parseInt(el.getAttribute('data-wk'));
+  var ii=parseInt(el.getAttribute('data-ii'));
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  var sorted=(s.weeklies||[]).sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);});
+  if(sorted[wi]) toggleWeekly(sid,sorted[wi].weekKey,ii);
+}
+
+function openPickupWishModal(sid){
+  pickupWishSid=sid;
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  var n=new Date();
+  var nextMonth=new Date(n.getFullYear(), n.getMonth()+1, 1);
+  var nextYm=nextMonth.getFullYear()+'-'+String(nextMonth.getMonth()+1).padStart(2,'0');
+  var nextLabel=nextMonth.getFullYear()+'년 '+(nextMonth.getMonth()+1)+'월';
+  var sel=document.getElementById('pickup-wish-select');
+  if(!sel){alert('모달을 찾을 수 없습니다');return;}
+  sel.innerHTML='<option value="">— 수업 선택 —</option>';
+  DB.regularClasses.forEach(function(c){
+    var opt=document.createElement('option');
+    opt.value=c.id;
+    opt.textContent=c.name+(c.teacher?' · '+c.teacher:'')+(c.day?' ('+c.day+')':'');
+    sel.appendChild(opt);
+  });
+  var wishes=s.pickupWishes||[];
+  var existing=wishes.find(function(w){return w.month===nextYm;});
+  if(existing){
+    sel.value=existing.classId||'';
+    document.getElementById('pickup-wish-note').value=existing.note||'';
+    document.getElementById('pickup-wish-current').textContent=nextLabel+' 신청완료';
+  } else {
+    sel.value='';
+    document.getElementById('pickup-wish-note').value='';
+    document.getElementById('pickup-wish-current').textContent=nextLabel+' 신청 내역 없음';
+  }
+  openM('modal-pickup-wish');
+}
+
+function submitPickupWish(){
+  var s=DB.students.find(function(x){return x.id===pickupWishSid;});
+  if(!s) return;
+  var classId=document.getElementById('pickup-wish-select').value;
+  var note=document.getElementById('pickup-wish-note').value.trim();
+  if(!classId){alert('수업을 선택해주세요');return;}
+  var n=new Date();
+  var nextMonth=new Date(n.getFullYear(), n.getMonth()+1, 1);
+  var nextYm=nextMonth.getFullYear()+'-'+String(nextMonth.getMonth()+1).padStart(2,'0');
+  if(!s.pickupWishes) s.pickupWishes=[];
+  var idx=s.pickupWishes.findIndex(function(w){return w.month===nextYm;});
+  var entry={month:nextYm,classId:classId,note:note};
+  if(idx>=0) s.pickupWishes[idx]=entry;
+  else s.pickupWishes.push(entry);
+  save();saveStudent(s);
+  showToast('✅ 희망신청 완료!');
+  closeM('modal-pickup-wish');
+  var cs=DB.students.find(function(x){return x.id===curSid;});
+  if(cs) renderProfile(cs);
+}
+
+function sendTeacherMsg(){
+  var content=document.getElementById('teacher-msg-input').value.trim();
+  if(!content){alert('내용을 입력해주세요');return;}
+  var s=DB.students.find(function(x){return x.id===teacherMsgSid;});
+  if(!s) return;
+  if(!s.teacherMessages) s.teacherMessages=[];
+  var now=new Date();
+  var date=(now.getMonth()+1)+'/'+now.getDate()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  s.teacherMessages.push({id:'tm'+Date.now(),content:content,date:date,read:false});
+  save();saveStudent(s);
+  showToast('✅ 메시지 전송 완료!');
+  closeM('modal-teacher-msg');
+  renderAdmContent();
+}
+
 function viewNotice(idx){
   var n=(DB.notices||[])[idx];
   if(!n) return;
@@ -1717,7 +1809,7 @@ function renderWeeklyList(s){
       html+='</div>';
       if(isThisWeek){
         html+='<div style="padding-left:29px">';
-        html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="width:100%;height:4px">';
+        html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="width:100%;background:linear-gradient(to right,var(--pink) '+ach+'%,var(--light) '+ach+'%)">';
         html+='</div>';
       }
       html+='</div>';
