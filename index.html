@@ -804,6 +804,30 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
 </div>
 
+<!-- 전체 메시지 모달 -->
+<div class="modal-overlay" id="modal-broadcast" onclick="if(event.target===this)closeM('modal-broadcast')">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">📢 전체 메시지 보내기</div>
+      <button class="close-btn" onclick="closeM('modal-broadcast')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#fef3c7;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#92400e">모든 학생에게 동일한 메시지가 전송됩니다</div>
+      <div class="form-row">
+        <label class="form-label">선생님 이름</label>
+        <input type="text" id="broadcast-teacher-name" placeholder="이름 입력">
+      </div>
+      <div class="form-row">
+        <label class="form-label">메시지 내용</label>
+        <textarea id="broadcast-content" placeholder="모든 학생에게 보낼 메시지를 입력하세요" style="min-height:120px"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-pink" onclick="sendBroadcast()">전체 전송</button>
+    </div>
+  </div>
+</div>
+
 <!-- 선생님의 한마디 모달 -->
 <div class="modal-overlay" id="modal-teacher-msg" onclick="if(event.target===this)closeM('modal-teacher-msg')">
   <div class="modal">
@@ -1168,6 +1192,29 @@ function submitPickupWish(){
   if(cs) renderProfile(cs);
 }
 
+function openBroadcastModal(){
+  document.getElementById('broadcast-teacher-name').value='';
+  document.getElementById('broadcast-content').value='';
+  openM('modal-broadcast');
+}
+function sendBroadcast(){
+  var name=(document.getElementById('broadcast-teacher-name').value||'').trim();
+  var content=document.getElementById('broadcast-content').value.trim();
+  if(!name){alert('선생님 이름을 입력해주세요');return;}
+  if(!content){alert('메시지 내용을 입력해주세요');return;}
+  if(!confirm('모든 학생 '+DB.students.length+'명에게 메시지를 보내시겠습니까?')) return;
+  var now=new Date();
+  var date=(now.getMonth()+1)+'/'+now.getDate()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  var count=0;
+  DB.students.forEach(function(s){
+    if(!s.teacherMessages) s.teacherMessages=[];
+    s.teacherMessages.push({id:'tm'+Date.now()+Math.random(),content:'['+name+'] '+content,date:date,read:false});
+    saveStudent(s);
+    count++;
+  });
+  showToast('✅ '+count+'명에게 전송 완료!');
+  closeM('modal-broadcast');
+}
 function sendTeacherMsg(){
   var content=document.getElementById('teacher-msg-input').value.trim();
   if(!content){alert('내용을 입력해주세요');return;}
@@ -1834,12 +1881,12 @@ function renderWeeklyList(s){
     html+='<div style="border-bottom:1px solid var(--border)">';
     html+='<div onclick="toggleWeekSection(this)" style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:'+(isThisWeek?'default':'pointer')+'">';
     html+='<div><div style="font-size:12px;font-weight:800;color:'+(isThisWeek?'var(--pink)':'var(--gray)')+'">'+( isThisWeek?'📍 이번 주':'📁 지난 주')+' · '+w.weekLabel+'</div>';
-    html+='<div style="font-size:11px;color:'+avgColor+';margin-top:1px;font-weight:700">평균 '+avgPct+'% 달성</div></div>';
+    html+='<div data-avg-label="'+wi+'" style="font-size:11px;color:'+avgColor+';margin-top:1px;font-weight:700">평균 '+avgPct+'% 달성</div></div>';
     html+='<div style="display:flex;align-items:center;gap:8px">';
     html+='<div style="width:34px;height:34px;position:relative"><svg viewBox="0 0 36 36" style="transform:rotate(-90deg);width:34px;height:34px">';
     html+='<circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" stroke-width="3"/>';
-    html+='<circle cx="18" cy="18" r="15" fill="none" stroke="'+avgColor+'" stroke-width="3" stroke-dasharray="'+Math.round(avgPct*0.942)+' 94.2" stroke-linecap="round"/>';
-    html+='</svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:var(--black)">'+avgPct+'%</div></div>';
+    html+='<circle cx="18" cy="18" r="15" fill="none" stroke="'+avgColor+'" stroke-width="3" stroke-dasharray="'+Math.round(avgPct*0.942)+' 94.2" stroke-linecap="round" data-avg-wi="'+wi+'" />';
+    html+='</svg><div data-avg-txt="'+wi+'" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:var(--black)">'+avgPct+'%</div></div>';
     if(!isThisWeek) html+='<span style="font-size:16px;color:var(--gray)">›</span>';
     html+='</div></div>';
     // 항목들 (이번주는 항상 펼침, 지난주는 접힘)
@@ -1854,10 +1901,11 @@ function renderWeeklyList(s){
       html+='</div>';
       // 슬라이더 한 줄 (배경이 게이지 역할)
       if(isThisWeek){
-        html+='<div style="position:relative;height:20px;display:flex;align-items:center">';
-        html+='<div id="wbar-'+wi+'-'+ii+'" style="position:absolute;left:0;top:50%;transform:translateY(-50%);height:8px;width:'+ach+'%;background:'+color+';border-radius:4px;pointer-events:none;transition:width .1s,background .2s"></div>';
-        html+='<div style="position:absolute;left:0;top:50%;transform:translateY(-50%);height:8px;width:100%;background:var(--light);border-radius:4px;z-index:0"></div>';
-        html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="position:absolute;width:100%;z-index:2;height:20px;margin:0;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer">';
+        // 이달의 목표와 동일한 방식 - 배경+컬러바+슬라이더 레이어
+        html+='<div style="position:relative;height:22px;display:flex;align-items:center;margin-top:2px">';
+        html+='<div style="position:absolute;width:100%;height:10px;background:var(--light);border-radius:5px;top:50%;transform:translateY(-50%)"></div>';
+        html+='<div id="wbar-'+wi+'-'+ii+'" style="position:absolute;height:10px;background:'+color+';border-radius:5px;top:50%;transform:translateY(-50%);width:'+ach+'%;transition:width .1s,background .2s;pointer-events:none"></div>';
+        html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="position:absolute;width:100%;opacity:0;cursor:pointer;z-index:2;height:22px;margin:0">';
         html+='</div>';
       } else {
         html+='<div style="background:var(--light);border-radius:4px;height:8px;overflow:hidden">';
@@ -1878,6 +1926,18 @@ function renderWeeklyList(s){
         var bar=document.getElementById('wbar-'+wi+'-'+ii);
         if(sp){sp.textContent=v+'%';sp.style.color=color;}
         if(bar){bar.style.width=v+'%';bar.style.background=color;}
+        // 원형 그래프 평균 업데이트
+        var items=document.querySelectorAll('.wk-ach[data-wi="'+wi+'"]');
+        var total=0; items.forEach(function(el2){total+=parseInt(el2.value)||0;});
+        var avg=Math.round(total/items.length);
+        var avgColor=pctColor(avg);
+        // SVG 원형 업데이트
+        var circles=document.querySelectorAll('[data-avg-wi="'+wi+'"]');
+        circles.forEach(function(c){c.setAttribute('stroke',avgColor);c.setAttribute('stroke-dasharray',Math.round(avg*0.942)+' 94.2');});
+        var avgTxt=document.querySelector('[data-avg-txt="'+wi+'"]');
+        if(avgTxt){avgTxt.textContent=avg+'%';}
+        var avgLabel=document.querySelector('[data-avg-label="'+wi+'"]');
+        if(avgLabel){avgLabel.textContent='평균 '+avg+'% 달성';avgLabel.style.color=avgColor;}
       };
       el.onchange=function(){
         var sid=parseInt(this.getAttribute('data-sid'));
@@ -2445,7 +2505,7 @@ function renderAdmContent(){
 
 // ── Students
 function renderAdmStudents(c){
-  c.innerHTML=`<button class="btn btn-pink" onclick="openM('modal-add-s')" style="margin-bottom:10px">+ 학생 추가</button>
+  c.innerHTML=`<div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn btn-pink" onclick="openM('modal-add-s')" style="flex:1">+ 학생 추가</button><button onclick="openBroadcastModal()" style="background:#7c3aed;color:white;border:none;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap">📢 전체메시지</button></div>
   <div class="adm-section">${!DB.students.length?'<div class="empty-msg">등록된 학생이 없습니다</div>':DB.students.map(s=>`
     <div class="adm-row">
       <div class="avatar" style="width:34px;height:34px;font-size:14px">${s.photo?`<img src="${s.photo}">`:`${s.name[0]}`}</div>
