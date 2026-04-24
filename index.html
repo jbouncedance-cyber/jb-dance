@@ -1995,7 +1995,7 @@ function saveTrainOpt(ti,oi){
   o.day=d.value;
   o.timeStart=s.value;
   o.timeEnd=e.value;
-  save();renderClsBody();
+  save();saveConfig();renderClsBody();
 }
 function delTrainOpt(ti,oi){
   if(!confirm('삭제하시겠습니까?')) return;
