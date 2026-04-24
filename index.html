@@ -1886,13 +1886,13 @@ function renderClsBody(){
           <div style="font-weight:800;font-size:13px;color:var(--pink)">${esc(ts.label)}</div>
           <span class="badge ${ts.required?'red':'gray'}">${ts.required?'필수':'선택'}</span>
         </div>
-        ${ts.options.map((o,oi)=>`<div class="adm-row" id="trow-${ti}-${oi}">
+        ${ts.options.map((o,oi)=>`<div class="adm-row" id="trow-${ts.slotKey}-${o.id}">
           <div style="flex:1;min-width:0">
             <div style="font-size:13px;font-weight:700">${esc(o.name)}${o.teacher?` <span style="color:var(--gray);font-weight:400">· ${esc(o.teacher)}</span>`:''}</div>
             <div style="font-size:11px;color:var(--gray);margin-top:1px">${o.day?`${o.day} ${o.timeStart||''}${o.timeEnd?'~'+o.timeEnd:''}`:'시간 미입력'}</div>
           </div>
           ${cnt[o.id]?`<span class="cnt-badge">${cnt[o.id]}명</span>`:''}
-          <button class="edt-btn" onclick="editTrainOpt(${ti},${oi})" style="margin-right:3px">수정</button>
+          <button class="edt-btn" onclick="editTrainOpt('${ts.slotKey}','${o.id}')" style="margin-right:3px">수정</button>
           <button class="del-btn" onclick="delTrainOpt(${ti},${oi})">삭제</button>
         </div>`).join('')}
         ${!ts.options.length?'<div class="empty-msg" style="padding:11px;font-size:13px">옵션 없음</div>':''}
@@ -1955,40 +1955,47 @@ function addTrainOpt(ti){
   DB.trainingSlots[ti].options.push({id:'to'+Date.now(),name,teacher,day:document.getElementById(`nto-day-${ti}`).value,timeStart:document.getElementById(`nto-start-${ti}`).value,timeEnd:document.getElementById(`nto-end-${ti}`).value});
   save();saveConfig();renderClsBody();
 }
-function editTrainOpt(ti,oi){
+function editTrainOpt(slotKey, optId){
+  // slotKey, optId로 실제 인덱스 찾기
+  const ti = DB.trainingSlots.findIndex(x=>x.slotKey===slotKey);
+  const oi = DB.trainingSlots[ti].options.findIndex(x=>x.id===optId);
+  if(ti<0||oi<0) return;
   const o=DB.trainingSlots[ti].options[oi];
-  const rowId='trow-'+ti+'-'+oi;
+  const rowId='trow-'+slotKey+'-'+optId;
   const row=document.getElementById(rowId);
   if(!row) return;
   const DAYS_O=['','월','화','수','목','금','토','일'];
   const dayOpts=DAYS_O.map(d=>`<option value="${d}"${o.day===d?' selected':''}>${d||'요일'}</option>`).join('');
   row.innerHTML=`
     <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:5px">
-      <input type="text" value="${o.name.replace(/"/g,'&quot;')}" id="te-name-${ti}-${oi}" placeholder="수업명"
+      <input type="text" value="${o.name.replace(/"/g,'&quot;')}" id="te-name-${slotKey}-${optId}" placeholder="수업명"
         style="padding:6px 9px;border:1.5px solid var(--pink);border-radius:8px;font-size:13px;font-family:inherit;outline:none;grid-column:span 2">
-      <input type="text" value="${(o.teacher||'').replace(/"/g,'&quot;')}" id="te-teacher-${ti}-${oi}" placeholder="선생님"
+      <input type="text" value="${(o.teacher||'').replace(/"/g,'&quot;')}" id="te-teacher-${slotKey}-${optId}" placeholder="선생님"
         style="padding:6px 9px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
-      <select id="te-day-${ti}-${oi}"
+      <select id="te-day-${slotKey}-${optId}"
         style="padding:6px 9px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:var(--white)">
         ${dayOpts}
       </select>
-      <input type="time" value="${o.timeStart||''}" id="te-start-${ti}-${oi}"
+      <input type="time" value="${o.timeStart||''}" id="te-start-${slotKey}-${optId}"
         style="padding:6px 9px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
-      <input type="time" value="${o.timeEnd||''}" id="te-end-${ti}-${oi}"
+      <input type="time" value="${o.timeEnd||''}" id="te-end-${slotKey}-${optId}"
         style="padding:6px 9px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
     </div>
-    <button onclick="saveTrainOpt(${ti},${oi})"
+    <button onclick="saveTrainOpt('${slotKey}','${optId}')"
       style="background:var(--pink);color:var(--white);border:none;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0;margin-left:4px">저장</button>
     <button onclick="renderClsBody()"
       style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0;margin-left:3px">취소</button>`;
 }
-function saveTrainOpt(ti,oi){
+function saveTrainOpt(slotKey,optId){
+  const ti=DB.trainingSlots.findIndex(x=>x.slotKey===slotKey);
+  const oi=DB.trainingSlots[ti].options.findIndex(x=>x.id===optId);
+  if(ti<0||oi<0){alert('수업을 찾을 수 없습니다');return}
   const o=DB.trainingSlots[ti].options[oi];
-  const n=document.getElementById('te-name-'+ti+'-'+oi);
-  const t=document.getElementById('te-teacher-'+ti+'-'+oi);
-  const d=document.getElementById('te-day-'+ti+'-'+oi);
-  const s=document.getElementById('te-start-'+ti+'-'+oi);
-  const e=document.getElementById('te-end-'+ti+'-'+oi);
+  const n=document.getElementById('te-name-'+slotKey+'-'+optId);
+  const t=document.getElementById('te-teacher-'+slotKey+'-'+optId);
+  const d=document.getElementById('te-day-'+slotKey+'-'+optId);
+  const s=document.getElementById('te-start-'+slotKey+'-'+optId);
+  const e=document.getElementById('te-end-'+slotKey+'-'+optId);
   if(!n||!n.value.trim()){alert('수업명을 입력해주세요');return}
   o.name=n.value.trim();
   o.teacher=t.value.trim();
@@ -1996,6 +2003,7 @@ function saveTrainOpt(ti,oi){
   o.timeStart=s.value;
   o.timeEnd=e.value;
   save();saveConfig();renderClsBody();
+  showToast('✅ 수업 시간 저장 완료!');
 }
 function delTrainOpt(ti,oi){
   if(!confirm('삭제하시겠습니까?')) return;
