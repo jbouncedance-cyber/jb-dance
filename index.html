@@ -191,6 +191,9 @@ textarea{resize:vertical;min-height:80px}
     getFirestore, doc, collection,
     getDoc, getDocs, setDoc, deleteDoc, onSnapshot
   } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+  import {
+    getStorage, ref, uploadString, getDownloadURL, deleteObject
+  } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyD90xFKykO14-bnVo0eze70R-iBxnDhzZM",
@@ -203,6 +206,7 @@ textarea{resize:vertical;min-height:80px}
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+  const storage = getStorage(app);
 
   const CONFIG_REF  = doc(db, 'jbdance', 'config');
   const STUDENTS_COL = collection(db, 'jbdance_students');
@@ -1530,16 +1534,37 @@ function openIbModal(id){
   openM('modal-ib');
 }
 function previewIb(inp){const f=inp.files[0];if(!f) return;const r=new FileReader();r.onload=e=>{const p=document.getElementById('ib-img-prev');p.src=e.target.result;p.style.display='block';};r.readAsDataURL(f);}
-function saveIb(){
+async function saveIb(){
   const s=DB.students.find(x=>x.id===curSid);if(!s) return;
-  const e={date:document.getElementById('ib-date').value,score:parseFloat(document.getElementById('ib-score').value)||0,weight:parseFloat(document.getElementById('ib-weight').value)||0,muscle:parseFloat(document.getElementById('ib-muscle').value)||0,fat:parseFloat(document.getElementById('ib-fat').value)||0,img:document.getElementById('ib-img-prev').src||''};
-  if(!e.date||!e.score){alert('날짜와 점수를 입력해주세요');return}
+  const imgPrev=document.getElementById('ib-img-prev');
+  const dateVal=document.getElementById('ib-date').value;
+  const score=parseFloat(document.getElementById('ib-score').value)||0;
+  if(!dateVal||!score){alert('날짜와 점수를 입력해주세요');return}
+
+  let imgUrl='';
+  // 사진이 있으면 Storage에 업로드
+  if(imgPrev.src && imgPrev.src.startsWith('data:') && window.fb){
+    showToast('⏳ 사진 업로드 중...');
+    const path='students/'+s.id+'/inbody_'+dateVal+'.jpg';
+    imgUrl=await window.fb.uploadPhoto(path, imgPrev.src) || '';
+  } else if(imgPrev.src && !imgPrev.src.startsWith('data:')){
+    imgUrl=imgPrev.src; // 이미 URL이면 그대로
+  }
+
+  const e={
+    date:dateVal,
+    score,
+    weight:parseFloat(document.getElementById('ib-weight').value)||0,
+    muscle:parseFloat(document.getElementById('ib-muscle').value)||0,
+    fat:parseFloat(document.getElementById('ib-fat').value)||0,
+    img:imgUrl
+  };
   if(!s.inbody)s.inbody=[];s.inbody.push(e);s.inbody.sort((a,b)=>a.date.localeCompare(b.date));
   closeM('modal-ib');
   if(window.fb){
     window.fb.saveStudent(s).then(()=>{
       showToast('✅ 인바디 저장 완료!');
-    }).catch(()=>showToast('❌ 저장 실패, 다시 시도해주세요'));
+    }).catch(()=>showToast('❌ 저장 실패'));
   }
   renderProfile(s);
   const ibt2=document.getElementById('ib-table-'+s.id);
@@ -2201,7 +2226,26 @@ function showToast(msg,duration=2500){
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function openM(id){document.getElementById(id).classList.add('active');}
 function closeM(id){document.getElementById(id).classList.remove('active');}
-function handleProfileImg(inp){const f=inp.files[0];if(!f) return;const r=new FileReader();r.onload=e=>{const s=DB.students.find(x=>x.id===curSid);if(!s) return;s.photo=e.target.result;save('student',s.id);renderProfile(s);renderStudentList();};r.readAsDataURL(f);}
+function handleProfileImg(inp){
+  const f=inp.files[0];if(!f) return;
+  const r=new FileReader();
+  r.onload=async function(e){
+    const s=DB.students.find(x=>x.id===curSid);if(!s) return;
+    showToast('⏳ 사진 업로드 중...');
+    const path='students/'+s.id+'/profile.jpg';
+    if(window.fb&&window.fb.uploadPhoto){
+      const url=await window.fb.uploadPhoto(path, e.target.result);
+      if(url){
+        s.photo=url;save();saveStudent(s);
+        showToast('✅ 사진 저장 완료!');
+        renderProfile(s);renderStudentList();
+      } else {
+        showToast('❌ 사진 업로드 실패');
+      }
+    }
+  };
+  r.readAsDataURL(f);
+}
 function bigImg(src){const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer';ov.innerHTML=`<img src="${src}" style="max-width:92%;max-height:92%;border-radius:12px">`;ov.onclick=()=>ov.remove();document.body.appendChild(ov);}
 
 // missing CSS for calendar/event-item (needed inline)
