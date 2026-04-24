@@ -364,7 +364,37 @@ textarea{resize:vertical;min-height:80px}
   // ══════════════════════════════════════
   // 전역 노출
   // ══════════════════════════════════════
-  window.fb = { saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest };
+  // ── Resources 컬렉션 ──
+  const RESOURCES_COL = collection(db, 'jbdance_resources');
+
+  async function saveResource(r) {
+    try { await setDoc(doc(RESOURCES_COL, String(r.id)), r); console.log('✅ resource 저장'); }
+    catch(e) { console.warn('resource 저장 실패:', e); }
+  }
+  async function deleteResource(id) {
+    try { await deleteDoc(doc(RESOURCES_COL, String(id))); }
+    catch(e) { console.warn('resource 삭제 실패:', e); }
+  }
+
+  // resources 실시간 동기화
+  onSnapshot(RESOURCES_COL, (snap) => {
+    snap.docChanges().forEach(change => {
+      const r = change.doc.data();
+      if (change.type === 'removed') {
+        window.DB.resources = (window.DB.resources||[]).filter(x => x.id !== r.id);
+      } else {
+        if(!window.DB.resources) window.DB.resources=[];
+        const idx = window.DB.resources.findIndex(x => x.id === r.id);
+        if (idx >= 0) window.DB.resources[idx] = r;
+        else window.DB.resources.push(r);
+      }
+    });
+    DB = window.DB;
+    const mainActive = document.getElementById('page-main')?.classList.contains('active');
+    if (mainActive && window.renderMain) window.renderMain();
+  });
+
+  window.fb = { saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest, saveResource, deleteResource, uploadPhoto, deletePhoto };
 
   // 앱 시작
   window.addEventListener('load', async () => {
