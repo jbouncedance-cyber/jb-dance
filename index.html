@@ -427,6 +427,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     } catch(e) {}
   }
 
+  window.fb_loadAll = loadAll;
   window.fb = { saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest, saveResource, deleteResource, uploadPhoto, deletePhoto };
 
   // 앱 시작
@@ -451,13 +452,15 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <div style="font-size:13px;color:#888">입시반 관리 시스템</div>
   <div style="width:36px;height:36px;border:3px solid #fbb6d8;border-top-color:#D4006A;border-radius:50%;animation:spin .8s linear infinite"></div>
 </div>
-<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+<style>@keyframes spin{to{transform:rotate(360deg)}}
+#refresh-btn{transition:opacity .2s}#refresh-btn:disabled{opacity:.5}</style>
 
 <!-- ===== MAIN ===== -->
 <div id="page-main" class="page active">
   <div class="header">
     <div><div class="logo">JB DANCE</div><div class="header-sub">입시반 관리 시스템</div></div>
     <div class="header-right">
+      <button class="sbtn" id="refresh-btn" onclick="refreshData()" title="새로고침" style="font-size:16px">🔄</button>
       <button class="sbtn" onclick="showPage('page-schedule')">📅</button>
       <button class="sbtn" onclick="goAdmin()">⚙️<span id="main-alert" style="display:none;color:var(--red)"> ●</span></button>
     </div>
@@ -1103,6 +1106,17 @@ function renderEventsBar(){
   w.innerHTML=html;
 }
 
+async function refreshData(){
+  var btn=document.getElementById('refresh-btn');
+  if(btn){btn.style.animation='spin .6s linear infinite';btn.disabled=true;}
+  try{
+    await window.fb_loadAll();
+    showToast('✅ 최신 데이터로 업데이트됐어요!');
+  } catch(e){
+    showToast('❌ 새로고침 실패');
+  }
+  if(btn){btn.style.animation='';btn.disabled=false;}
+}
 function renderMain(){
   renderNoticeBar();
   renderEventsBar();
