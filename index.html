@@ -2843,7 +2843,9 @@ function savePickup(){
   const idx=s.pickupHistory.findIndex(h=>h.month===month);
   if(idx>=0) s.pickupHistory[idx].classId=classId;
   else s.pickupHistory.push({month,classId});
-  save('student',pickupSid);closeM('modal-pickup');renderAdmContent();renderStudentList();
+  const ps=DB.students.find(x=>x.id===pickupSid);
+  save();if(ps) saveStudent(ps);closeM('modal-pickup');renderAdmContent();renderStudentList();
+  showToast('✅ 픽업수업 저장 완료!');
 }
 
 // ── Schedule
