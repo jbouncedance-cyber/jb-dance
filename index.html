@@ -1005,6 +1005,22 @@ function renderNoticeBar(){
   w.innerHTML=html;
 }
 
+// ── 누락된 상수 및 함수 복구 ──
+const POSTIT_COLORS=['#fef08a','#bbf7d0','#bfdbfe','#fecdd3','#e9d5ff','#fed7aa','#a5f3fc','#fde68a'];
+
+function updAlertDot(){
+  var n=(DB.requests||[]).filter(function(r){return !r.read;}).length;
+  var d=document.getElementById('main-alert');
+  if(d) d.style.display=n?'inline':'none';
+}
+window.updAlertDot=updAlertDot;
+
+function updReqBadge(){
+  var n=(DB.requests||[]).filter(function(r){return !r.read;}).length;
+  var b=document.getElementById('req-badge');
+  if(b){b.textContent=n;b.style.display=n?'inline':'none';}
+}
+
 function renderMain(){
   renderNoticeBar();
   renderResourceBoard();
@@ -2264,7 +2280,7 @@ function renderAdmContent(){
   else if(admTab_==='resource') renderAdmResource(c);
   else if(admTab_==='settings') renderAdmSettings(c);
 }
-function updReqBadge(){const n=DB.requests.filter(r=>!r.read).length;const b=document.getElementById('req-badge');if(b){b.style.display=n?'inline':'none';b.textContent=n;}}
+// updReqBadge - see above
 
 // ── Students
 function renderAdmStudents(c){
