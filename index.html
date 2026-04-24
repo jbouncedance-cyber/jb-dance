@@ -742,6 +742,27 @@ textarea{resize:vertical;min-height:80px}
   </div>
 </div>
 
+<!-- 선생님의 한마디 모달 -->
+<div class="modal-overlay" id="modal-teacher-msg" onclick="if(event.target===this)closeM('modal-teacher-msg')">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">💌 선생님의 한마디</div>
+      <button class="close-btn" onclick="closeM('modal-teacher-msg')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="teacher-msg-student-name" style="font-size:14px;font-weight:800;margin-bottom:12px;color:var(--pink)"></div>
+      <div id="teacher-msg-history" style="max-height:200px;overflow-y:auto;margin-bottom:12px"></div>
+      <div class="form-row">
+        <label class="form-label">새 메시지</label>
+        <textarea id="teacher-msg-input" placeholder="학생에게 전하고 싶은 말을 적어주세요" style="min-height:100px"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-pink" onclick="sendTeacherMsg()">전송하기</button>
+    </div>
+  </div>
+</div>
+
 <!-- Notice view -->
 <div class="modal-overlay" id="modal-notice" onclick="if(event.target===this)closeM('modal-notice')">
   <div class="modal">
@@ -1322,14 +1343,8 @@ function renderProfile(s){
     </div>
   </div>
 
-  <!-- 목표 -->
-  <div class="card">
-    <div class="card-head"><div class="card-title">✨ 목표</div></div>
-    <div class="card-body">
-      <div class="form-row"><label class="form-label">이달의 목표</label><textarea placeholder="이달에 이루고 싶은 것을 적어보세요" onchange="updField(${s.id},'monthly',this.value)">${esc(s.goals?.monthly||'')}</textarea></div>
-      <div class="form-row" style="margin-bottom:0"><label class="form-label">댄서로서의 목표</label><textarea placeholder="댄서로서 궁극적인 목표를 적어보세요" onchange="updField(${s.id},'dancer',this.value)">${esc(s.goals?.dancer||'')}</textarea></div>
-    </div>
-  </div>
+  <!-- 이달의 목표 -->
+  \${renderMonthlyGoalCard(s)}
 
   <!-- 주간 체크리스트 -->
   <div class="card">
@@ -1422,11 +1437,98 @@ function renderProfile(s){
     </div>
   </div>
 
+  <!-- 선생님의 한마디 -->
+  \${renderTeacherMessages(s)}
+
   <!-- 인바디 -->
   <div class="card">
     <div class="card-head"><div class="card-title">📊 인바디 기록</div><button class="sbtn pink" onclick="openIbModal(${s.id})">+ 추가</button></div>
     <div style="overflow-x:auto" id="ib-table-${s.id}"></div>
   </div>`;
+}
+
+function renderMonthlyGoalCard(s){
+  var n=new Date();
+  var ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  var ymLabel=n.getFullYear()+'년 '+(n.getMonth()+1)+'월';
+  var goals=s.monthlyGoals||[];
+  var cur=goals.find(function(g){return g.month===ym;})||{month:ym,goal:'',achievement:0};
+  var prev=goals.filter(function(g){return g.month!==ym;}).sort(function(a,b){return b.month.localeCompare(a.month);}).slice(0,3);
+  var ach=cur.achievement||0;
+  var parts=[];
+  parts.push('<div class="card">');
+  parts.push('<div class="card-head"><div class="card-title">✨ 이달의 목표</div><span style="font-size:11px;color:var(--gray)">'+ymLabel+'</span></div>');
+  parts.push('<div class="card-body">');
+  parts.push('<div class="form-row"><label class="form-label">이달 목표</label>');
+  parts.push('<textarea id="goal-monthly-'+s.id+'" placeholder="이달에 이루고 싶은 것을 적어보세요" onblur="saveMonthlyGoalText('+s.id+',this.value)">'+esc(cur.goal)+'</textarea></div>');
+  parts.push('<div class="form-row"><label class="form-label">달성률</label>');
+  parts.push('<div style="display:flex;align-items:center;gap:10px">');
+  parts.push('<input type="range" id="goal-ach-'+s.id+'" data-sid="'+s.id+'" min="0" max="100" value="'+ach+'" style="flex:1" oninput="goalRangeInput(this)" onchange="saveMonthlyAch('+s.id+',this.value)">');
+  parts.push('<span id="goal-pct-'+s.id+'" style="font-size:14px;font-weight:800;color:var(--pink);min-width:40px">'+ach+'%</span></div>');
+  parts.push('<div style="background:var(--light);border-radius:20px;height:8px;margin-top:6px;overflow:hidden"><div id="goal-bar-'+s.id+'" style="background:var(--pink);height:100%;width:'+ach+'%;border-radius:20px;transition:width .3s"></div></div></div>');
+  parts.push('<div class="form-row" style="margin-bottom:0"><label class="form-label">댄서로서의 목표</label>');
+  parts.push('<textarea placeholder="댄서로서 궁극적인 목표를 적어보세요" onblur="updField('+s.id+',&quot;dancer&quot;,this.value)">'+esc(s.goals&&s.goals.dancer||'')+'</textarea></div>');
+  if(prev.length){
+    parts.push('<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px"><div style="font-size:11px;font-weight:800;color:var(--gray);margin-bottom:8px">📅 지난 목표 기록</div>');
+    prev.forEach(function(g){
+      var ga=g.achievement||0;
+      parts.push('<div style="background:var(--light);border-radius:8px;padding:8px 10px;margin-bottom:6px">');
+      parts.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:11px;font-weight:700;color:var(--gray)">'+g.month+'</span><span style="font-size:12px;font-weight:800;color:var(--pink)">'+ga+'%</span></div>');
+      parts.push('<div style="font-size:12px">'+esc(g.goal)+'</div>');
+      parts.push('<div style="background:var(--border);border-radius:20px;height:5px;margin-top:5px;overflow:hidden"><div style="background:var(--pink);height:100%;width:'+ga+'%;border-radius:20px"></div></div></div>');
+    });
+    parts.push('</div>');
+  }
+  parts.push('</div></div>');
+  return parts.join('');
+}
+
+
+function saveMonthlyAch(sid, achievement){
+  const s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  const n=new Date();
+  const ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  if(!s.monthlyGoals) s.monthlyGoals=[];
+  var idx=s.monthlyGoals.findIndex(function(g){return g.month===ym;});
+  if(idx>=0) s.monthlyGoals[idx].achievement=parseInt(achievement)||0;
+  else s.monthlyGoals.push({month:ym,goal:'',achievement:parseInt(achievement)||0});
+  save();saveStudent(s);
+  // progress bar 업데이트
+  var bar=document.getElementById('goal-bar-'+sid);
+  if(bar) bar.style.width=achievement+'%';
+}
+function saveMonthlyGoalText(sid, goal){
+  // 달성률은 현재값 유지
+  const s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  const n=new Date();
+  const ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  if(!s.monthlyGoals) s.monthlyGoals=[];
+  var idx=s.monthlyGoals.findIndex(function(g){return g.month===ym;});
+  var cur=idx>=0?s.monthlyGoals[idx]:{month:ym,goal:'',achievement:0};
+  cur.goal=goal||'';
+  if(idx>=0) s.monthlyGoals[idx]=cur;
+  else s.monthlyGoals.push(cur);
+  if(!s.goals) s.goals={};
+  s.goals.monthly=goal||'';
+  save();saveStudent(s);
+  showToast('✅ 목표 저장!');
+}
+function saveMonthlyGoal(sid, goal, achievement){
+  const s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  const n=new Date();
+  const ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  if(!s.monthlyGoals) s.monthlyGoals=[];
+  const idx=s.monthlyGoals.findIndex(function(g){return g.month===ym;});
+  const entry={month:ym,goal:goal||'',achievement:parseInt(achievement)||0};
+  if(idx>=0) s.monthlyGoals[idx]=entry;
+  else s.monthlyGoals.push(entry);
+  // goals.monthly도 업데이트
+  if(!s.goals) s.goals={};
+  s.goals.monthly=goal||'';
+  save();saveStudent(s);
 }
 
 function updField(id,field,value){
@@ -1453,40 +1555,61 @@ function getWeekKey(offsetWeeks){
   return monday.toISOString().slice(0,10);
 }
 function renderWeeklyList(s){
-  const weeks=s.weeklies||[];
-  if(!weeks.length) return `<div class="empty-msg" style="padding:16px;font-size:13px">"이번 주 작성" 버튼으로 체크리스트를 만들어보세요 💪</div>`;
-  // show last 4 weeks
-  const sorted=[...weeks].sort((a,b)=>b.weekKey.localeCompare(a.weekKey)).slice(0,4);
-  return sorted.map((w,wi)=>{
-    const isThisWeek=wi===0;
-    const done=w.items.filter(i=>i.checked).length;
-    const total=w.items.length;
-    const pct=total?Math.round(done/total*100):0;
-    return `<div style="border-bottom:1px solid var(--border);padding:11px 14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div>
-          <div style="font-size:12px;font-weight:800;color:${isThisWeek?'var(--pink)':'var(--gray)'}">${isThisWeek?'📍 이번 주':'지난 주'} · ${w.weekLabel}</div>
-          <div style="font-size:11px;color:var(--gray);margin-top:1px">${done}/${total} 달성 · ${pct}%</div>
-        </div>
-        <div style="width:36px;height:36px;position:relative">
-          <svg viewBox="0 0 36 36" style="transform:rotate(-90deg);width:36px;height:36px">
-            <circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" stroke-width="3"/>
-            <circle cx="18" cy="18" r="15" fill="none" stroke="${pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--pink)'}" stroke-width="3"
-              stroke-dasharray="${Math.round(pct*0.942)} 94.2" stroke-linecap="round"/>
-          </svg>
-          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:var(--black)">${pct}%</div>
-        </div>
-      </div>
-      ${w.items.map((item,ii)=>`
-      <div style="display:flex;align-items:center;gap:9px;padding:5px 0;border-bottom:1px solid var(--border)" onclick="${isThisWeek?`toggleWeekly(${s.id},'${w.weekKey}',${ii})`:''}">
-        <div style="width:20px;height:20px;border-radius:50%;border:2px solid ${item.checked?'var(--green)':'var(--gray2)'};background:${item.checked?'var(--green)':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:${isThisWeek?'pointer':'default'}">
-          ${item.checked?'<span style="color:white;font-size:11px;font-weight:800">✓</span>':''}
-        </div>
-        <div style="flex:1;font-size:13px;${item.checked?'text-decoration:line-through;color:var(--gray)':'font-weight:600'}">${esc(item.text)}</div>
-        ${item.checked&&item.checkedDate?`<div style="font-size:10px;color:var(--green);flex-shrink:0">${item.checkedDate}</div>`:''}
-      </div>`).join('')}
-    </div>`;
+  var weeks=s.weeklies||[];
+  if(!weeks.length) return '<div class="empty-msg" style="padding:16px;font-size:13px">"이번 주 작성" 버튼으로 체크리스트를 만들어보세요 💪</div>';
+  var sorted=[...weeks].sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);}).slice(0,4);
+  return sorted.map(function(w,wi){
+    var isThisWeek=wi===0;
+    var total=w.items.length;
+    var done=w.items.filter(function(i){return i.checked;}).length;
+    var pct=total?Math.round(done/total*100):0;
+    var color=pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--pink)';
+    var parts=[];
+    parts.push('<div style="border-bottom:1px solid var(--border);padding:11px 14px">');
+    parts.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">');
+    parts.push('<div><div style="font-size:12px;font-weight:800;color:'+(isThisWeek?'var(--pink)':'var(--gray)')+'">');
+    parts.push((isThisWeek?'📍 이번 주':'지난 주')+' · '+w.weekLabel+'</div>');
+    parts.push('<div style="font-size:11px;color:var(--gray);margin-top:1px">'+pct+'% 전체달성</div></div>');
+    parts.push('<div style="width:36px;height:36px;position:relative">');
+    parts.push('<svg viewBox="0 0 36 36" style="transform:rotate(-90deg);width:36px;height:36px">');
+    parts.push('<circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" stroke-width="3"/>');
+    parts.push('<circle cx="18" cy="18" r="15" fill="none" stroke="'+color+'" stroke-width="3" stroke-dasharray="'+Math.round(pct*0.942)+' 94.2" stroke-linecap="round"/>');
+    parts.push('</svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:var(--black)">'+pct+'%</div></div></div>');
+    w.items.forEach(function(item,ii){
+      var ach=item.achievement||0;
+      var wk=JSON.stringify(w.weekKey);
+      var toggleFn=isThisWeek?'toggleWeekly('+s.id+','+wk+','+ii+')':'';
+      var achFn=isThisWeek?'saveItemAchievement('+s.id+','+wk+','+ii+',this.value)':'';
+      parts.push('<div style="padding:7px 0;border-bottom:1px solid var(--border)">');
+      parts.push('<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">');
+      parts.push('<div onclick="'+toggleFn+'" style="width:20px;height:20px;border-radius:50%;border:2px solid '+(item.checked?'var(--green)':'var(--gray2)')+';background:'+(item.checked?'var(--green)':'transparent')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:'+(isThisWeek?'pointer':'default')+'">');
+      parts.push(item.checked?'<span style="color:white;font-size:11px;font-weight:800">✓</span>':'');
+      parts.push('</div>');
+      parts.push('<div style="flex:1;font-size:13px;'+(item.checked?'text-decoration:line-through;color:var(--gray)':'font-weight:600')+'">'+esc(item.text)+'</div>');
+      parts.push('<span style="font-size:11px;font-weight:800;color:var(--pink)">'+ach+'%</span></div>');
+      if(isThisWeek){
+        parts.push('<div style="display:flex;align-items:center;gap:6px;padding-left:29px">');
+        parts.push('<input type="range" min="0" max="100" value="'+ach+'" style="flex:1;height:4px" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="'+achFn+'">');
+        parts.push('<span style="font-size:10px;color:var(--gray);min-width:30px">'+ach+'%</span>');
+        parts.push('</div>');
+      }
+      parts.push('</div>');
+    });
+    parts.push('</div>');
+    return parts.join('');
   }).join('');
+}
+
+
+function saveItemAchievement(sid,weekKey,ii,val){
+  const s=DB.students.find(function(x){return x.id===sid;});
+  if(!s||!s.weeklies) return;
+  const w=s.weeklies.find(function(x){return x.weekKey===weekKey;});
+  if(!w||!w.items[ii]) return;
+  w.items[ii].achievement=parseInt(val)||0;
+  save();saveStudent(s);
+  const el=document.getElementById('weekly-list-'+sid);
+  if(el) el.innerHTML=renderWeeklyList(s);
 }
 function openWeeklyModal(sid){
   curSid=sid;
@@ -1547,6 +1670,36 @@ function saveMajor(){
 }
 
 // Inbody
+function renderTeacherMessages(s){
+  var msgs=(s.teacherMessages||[]).slice().reverse();
+  if(!msgs.length) return '';
+  var parts=['<div class="card"><div class="card-head"><div class="card-title">💌 선생님의 한마디</div></div>'];
+  msgs.forEach(function(m){
+    var isNew=!m.read;
+    var readFn='markTeacherMsgRead('+s.id+','+JSON.stringify(m.id)+')';
+    parts.push('<div style="padding:12px 14px;border-bottom:1px solid var(--border);'+(isNew?'background:var(--pink-bg)':'')+'">' );
+    parts.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">');
+    parts.push('<span style="font-size:11px;font-weight:700;color:var(--gray)">'+m.date+'</span>');
+    if(isNew) parts.push('<span style="background:var(--pink);color:white;font-size:10px;font-weight:800;border-radius:10px;padding:2px 8px">NEW</span>');
+    parts.push('</div>');
+    parts.push('<div style="font-size:13px;line-height:1.6">'+esc(m.content).replace(/\n/g,'<br>')+'</div>');
+    if(isNew) parts.push('<button onclick="'+readFn+'" style="margin-top:8px;background:none;border:1px solid var(--pink);color:var(--pink);border-radius:8px;padding:4px 12px;font-size:11px;cursor:pointer;font-family:inherit">읽었어요 ✓</button>');
+    parts.push('</div>');
+  });
+  parts.push('</div>');
+  return parts.join('');
+}
+
+
+function markTeacherMsgRead(sid, msgId){
+  const s=DB.students.find(function(x){return x.id===sid;});
+  if(!s||!s.teacherMessages) return;
+  const m=s.teacherMessages.find(function(x){return x.id===msgId;});
+  if(m) m.read=true;
+  save();saveStudent(s);
+  renderProfile(s);
+}
+
 function renderIbTable(s){
   if(!s.inbody||!s.inbody.length) return '<div class="empty-msg" style="padding:18px">측정 기록이 없습니다</div>';
   const sorted=[...s.inbody].sort((a,b)=>a.date.localeCompare(b.date));
@@ -1941,6 +2094,7 @@ function renderAdmStudents(c){
     <div class="adm-row">
       <div class="avatar" style="width:34px;height:34px;font-size:14px">${s.photo?`<img src="${s.photo}">`:`${s.name[0]}`}</div>
       <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px">${esc(s.name)}</div><div class="text-sm text-gray">${s.major||'전공없음'} · ${s.birth}</div></div>
+      <button onclick="openTeacherMsg(${s.id})" style="background:var(--pink-bg);border:1px solid #fbb6d8;color:var(--pink);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;margin-right:3px">💌</button>
       <button class="edt-btn" onclick="openPwM(${s.id})" style="margin-right:3px">🔑 PW</button>
       <button class="del-btn" onclick="delStudent(${s.id})">삭제</button>
     </div>`).join('')}
@@ -1950,7 +2104,7 @@ function addStudent(){
   const name=document.getElementById('ns-name').value.trim(),birth=document.getElementById('ns-birth').value,major=document.getElementById('ns-major').value.trim(),pw=document.getElementById('ns-pw').value;
   if(!name||!birth||!pw){alert('이름, 생년월일, 비밀번호는 필수입니다');return}
   if(pw.length!==4||!/^\d+$/.test(pw)){alert('비밀번호는 숫자 4자리여야 합니다');return}
-  const newS={id:Date.now(),name,birth,major,pw,photo:'',classes:{},goals:{monthly:'',dancer:''},inbody:[],pickupHistory:[]};
+  const newS={id:Date.now(),name,birth,major,pw,photo:'',classes:{},goals:{monthly:'',dancer:''},inbody:[],pickupHistory:[],monthlyGoals:[],teacherMessages:[]};
   DB.students.push(newS);
   save('student',newS.id);closeM('modal-add-s');renderAdmContent();
 }
@@ -2429,4 +2583,24 @@ if(savedVer && savedVer !== BUILD_VER){
 }
 </script>
 </body>
-</html>
+</html>function openTeacherMsg(sid){
+  teacherMsgSid=sid;
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  document.getElementById('teacher-msg-student-name').textContent='👤 '+s.name+'에게';
+  document.getElementById('teacher-msg-input').value='';
+  var msgs=(s.teacherMessages||[]).slice().reverse();
+  var parts=[];
+  if(!msgs.length){parts.push('<div style="text-align:center;padding:12px;font-size:13px;color:var(--gray)">아직 메시지가 없어요</div>');}
+  msgs.forEach(function(m){
+    var delFn='delTeacherMsg('+sid+','+JSON.stringify(m.id)+')';
+    parts.push('<div style="background:var(--light);border-radius:8px;padding:8px 10px;margin-bottom:6px">');
+    parts.push('<div style="font-size:10px;color:var(--gray);margin-bottom:4px">'+m.date+(m.read?' · ✓ 읽음':'')+'</div>');
+    parts.push('<div style="font-size:12px;line-height:1.5">'+esc(m.content)+'</div>');
+    parts.push('<button onclick="'+delFn+'" style="margin-top:4px;background:none;border:none;color:var(--gray2);cursor:pointer;font-size:11px">삭제</button>');
+    parts.push('</div>');
+  });
+  document.getElementById('teacher-msg-history').innerHTML=parts.join('');
+  openM('modal-teacher-msg');
+}
+
