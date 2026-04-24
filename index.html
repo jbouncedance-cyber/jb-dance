@@ -961,8 +961,10 @@ function showPage(id){
 function renderResourceBoard(){
   const w=document.getElementById('resource-board-wrap');
   if(!w) return;
-  const resources=(DB.resources||[]).slice().reverse();
-  if(!resources.length){w.innerHTML='';return;}
+  const allRes=(DB.resources||[]).slice().reverse();
+  if(!allRes.length){w.innerHTML='';return;}
+  const showAll=window._resShowAll||false;
+  const resources=showAll?allRes:allRes.slice(0,3);
   let html='<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:6px;padding:0 2px">🎬 영상/지식 공유</div>';
   resources.forEach(function(r){
     var isYT=r.url&&(r.url.indexOf('youtube.com')>=0||r.url.indexOf('youtu.be')>=0);
@@ -992,9 +994,11 @@ function renderNoticeBar(){
   const w=document.getElementById('notice-bar-wrap');
   const notices=DB.notices||[];
   if(!notices.length){w.innerHTML='';return;}
+  const showAll=window._noticeShowAll||false;
+  const display=showAll?notices:notices.slice(0,3);
   w.innerHTML=`<div style="margin-bottom:10px">
     <div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:6px;padding:0 2px">📢 공지사항</div>
-    ${notices.map((n,i)=>`
+    ${display.map((n,i)=>`
     <div onclick="viewNotice(${i})" style="background:var(--white);border:1px solid var(--border);border-left:3px solid var(--pink);border-radius:10px;padding:10px 13px;margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:800;color:var(--pink)">${esc(n.title)}</div>
@@ -1002,6 +1006,11 @@ function renderNoticeBar(){
       </div>
       <div style="color:var(--gray2);font-size:18px;flex-shrink:0">›</div>
     </div>`).join('')}
+    ${notices.length>3?`<div style="text-align:center;margin-top:4px">
+      <button onclick="window._noticeShowAll=!window._noticeShowAll;renderNoticeBar()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:5px 16px;font-size:11px;color:var(--gray);cursor:pointer;font-family:inherit">
+        ${showAll?'▲ 접기':'▼ 더보기 ('+(notices.length-3)+'개 더)'}
+      </button>
+    </div>`:''}
   </div>`;
 }
 function viewNotice(idx){
@@ -1510,6 +1519,76 @@ function renderMonthlyGoalCard(s){
   return parts.join('');
 }
 
+
+// ── 이달의 목표 달성률 슬라이더 ──
+function goalRangeInput(el){
+  var sid=el.getAttribute('data-sid');
+  var v=el.value;
+  var pct=document.getElementById('goal-pct-'+sid);
+  var bar=document.getElementById('goal-bar-'+sid);
+  if(pct) pct.textContent=v+'%';
+  if(bar) bar.style.width=v+'%';
+}
+
+// ── 픽업수업 희망신청 ──
+var pickupWishSid=null;
+function openPickupWishModal(sid){
+  pickupWishSid=sid;
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  var n=new Date();
+  var nextMonth=new Date(n.getFullYear(), n.getMonth()+1, 1);
+  var nextYm=nextMonth.getFullYear()+'-'+String(nextMonth.getMonth()+1).padStart(2,'0');
+  var nextLabel=nextMonth.getFullYear()+'년 '+(nextMonth.getMonth()+1)+'월';
+  var sel=document.getElementById('pickup-wish-select');
+  if(!sel){alert('모달을 찾을 수 없습니다');return;}
+  sel.innerHTML='<option value="">— 수업 선택 —</option>';
+  DB.regularClasses.forEach(function(c){
+    var opt=document.createElement('option');
+    opt.value=c.id;
+    opt.textContent=c.name+(c.teacher?' · '+c.teacher:'')+(c.day?' ('+c.day+')':'');
+    sel.appendChild(opt);
+  });
+  var wishes=s.pickupWishes||[];
+  var existing=wishes.find(function(w){return w.month===nextYm;});
+  if(existing){
+    sel.value=existing.classId||'';
+    document.getElementById('pickup-wish-note').value=existing.note||'';
+    document.getElementById('pickup-wish-current').textContent=nextLabel+' 신청완료';
+  } else {
+    sel.value='';
+    document.getElementById('pickup-wish-note').value='';
+    document.getElementById('pickup-wish-current').textContent=nextLabel+' 신청 내역 없음';
+  }
+  openM('modal-pickup-wish');
+}
+function submitPickupWish(){
+  var s=DB.students.find(function(x){return x.id===pickupWishSid;});
+  if(!s) return;
+  var classId=document.getElementById('pickup-wish-select').value;
+  var note=document.getElementById('pickup-wish-note').value.trim();
+  if(!classId){alert('수업을 선택해주세요');return;}
+  var n=new Date();
+  var nextMonth=new Date(n.getFullYear(), n.getMonth()+1, 1);
+  var nextYm=nextMonth.getFullYear()+'-'+String(nextMonth.getMonth()+1).padStart(2,'0');
+  if(!s.pickupWishes) s.pickupWishes=[];
+  var idx=s.pickupWishes.findIndex(function(w){return w.month===nextYm;});
+  var entry={month:nextYm,classId:classId,note:note};
+  if(idx>=0) s.pickupWishes[idx]=entry;
+  else s.pickupWishes.push(entry);
+  save();saveStudent(s);
+  showToast('✅ 희망신청 완료!');
+  closeM('modal-pickup-wish');
+}
+
+// ── weeklyToggle ──
+function weeklyToggle(el){
+  var sid=parseInt(el.getAttribute('data-sid'));
+  var wi=parseInt(el.getAttribute('data-wk'));
+  var ii=parseInt(el.getAttribute('data-ii'));
+  var sorted=(DB.students.find(function(x){return x.id===sid;})||{weeklies:[]}).weeklies.sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);});
+  if(sorted[wi]) toggleWeekly(sid,sorted[wi].weekKey,ii);
+}
 
 function saveMonthlyAch(sid, achievement){
   const s=DB.students.find(function(x){return x.id===sid;});
@@ -2423,16 +2502,43 @@ function delEvAdm(id){if(!confirm('삭제하시겠습니까?')) return;DB.events
 // ── Requests
 function renderAdmRequests(c){
   DB.requests.forEach(r=>r.read=true);save();updReqBadge();updAlertDot();
+
+  // 픽업희망 목록
+  var allWishes=[];
+  DB.students.forEach(function(s){
+    (s.pickupWishes||[]).forEach(function(w){
+      var cls=DB.regularClasses.find(function(x){return x.id===w.classId;});
+      allWishes.push({studentName:s.name,month:w.month,className:cls?cls.name:'알수없음',note:w.note||''});
+    });
+  });
+  allWishes.sort(function(a,b){return b.month.localeCompare(a.month);});
+  var wishMonths={};
+  allWishes.forEach(function(w){if(!wishMonths[w.month])wishMonths[w.month]=[];wishMonths[w.month].push(w);});
+  var wishHtml='<div class="adm-section" style="margin-bottom:12px"><div style="padding:10px 13px;background:#e0f2fe;border-bottom:1px solid var(--border);font-weight:800;font-size:13px;color:#0369a1">🌟 픽업수업 희망신청 현황</div>';
+  if(!allWishes.length){wishHtml+='<div class="empty-msg" style="padding:16px">신청 내역이 없습니다</div>';}
+  else{
+    Object.keys(wishMonths).sort().reverse().forEach(function(month){
+      wishHtml+='<div style="padding:8px 13px;background:var(--light);font-size:12px;font-weight:800;color:var(--gray)">📅 '+month+'</div>';
+      wishMonths[month].forEach(function(w){
+        wishHtml+='<div class="adm-row"><div style="flex:1"><div style="font-weight:700">'+esc(w.studentName)+'</div><div style="font-size:11px;color:var(--gray)">'+esc(w.className)+(w.note?' · '+esc(w.note):'')+'</div></div></div>';
+      });
+    });
+  }
+  wishHtml+='</div>';
+
   const sorted=[...DB.requests].sort((a,b)=>b.id.localeCompare(a.id));
   const tl={change:'수업변경',question:'질문'};
-  c.innerHTML=!sorted.length?'<div class="empty-msg">신청 내역이 없습니다</div>':sorted.map(r=>`
+  const reqHtml=!sorted.length?'<div class="empty-msg">신청 내역이 없습니다</div>':sorted.map(r=>`
   <div class="req-item">
     <span class="req-tag ${r.type}">${tl[r.type]||r.type}</span>
     <div style="font-weight:800;font-size:14px;margin-bottom:3px">${esc(r.studentName)}</div>
-    <div style="font-size:13px;color:var(--gray);line-height:1.5">${esc(r.reason)}</div>
-    <div class="text-sm text-gray" style="margin-top:5px">${r.date}</div>
-    <button class="del-btn" style="margin-top:7px" onclick="delReq('${r.id}')">삭제</button>
+    <div style="font-size:13px;color:var(--gray);margin-bottom:6px">${esc(r.reason)}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:11px;color:var(--gray2)">${r.date}</span>
+      <button class="del-btn" onclick="delReq('${r.id}')">삭제</button>
+    </div>
   </div>`).join('');
+  c.innerHTML=wishHtml+'<div class="adm-section"><div style="padding:10px 13px;background:var(--pink-bg);border-bottom:1px solid var(--border);font-weight:800;font-size:13px;color:var(--pink)">💬 질문 신청 내역</div>'+reqHtml+'</div>';
 }
 function delReq(id){DB.requests=DB.requests.filter(x=>x.id!==id);if(window.fb) window.fb.deleteRequest(id);renderAdmContent();}
 
