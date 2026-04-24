@@ -172,6 +172,9 @@ textarea{resize:vertical;min-height:80px}
 .reply-content{font-size:12px;color:var(--black);line-height:1.5;flex:1}
 .reply-time{font-size:10px;color:var(--gray2);flex-shrink:0}
 input[type=range]{-webkit-appearance:none;appearance:none;height:8px;background:var(--light);border-radius:4px;outline:none;cursor:pointer}
+.wk-ach{height:20px !important;background:transparent !important}
+.wk-ach::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--pink);cursor:pointer;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.wk-ach::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--pink);cursor:pointer;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--pink);cursor:pointer;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--pink);cursor:pointer;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 .img-upload-btn{display:block;width:100%;padding:10px;border:1.5px dashed var(--gray2);border-radius:9px;text-align:center;font-size:13px;color:var(--gray);cursor:pointer;background:var(--light);font-family:inherit;margin-bottom:3px}
@@ -1119,6 +1122,31 @@ function openPickupWishModal(sid){
   openM('modal-pickup-wish');
 }
 
+function saveMonthlyGoalBtn(sid){
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  var goal=(document.getElementById('goal-monthly-'+sid)||{value:''}).value||'';
+  var dancer=(document.getElementById('goal-dancer-'+sid)||{value:''}).value||'';
+  var ach=parseInt((document.getElementById('goal-ach-'+sid)||{value:0}).value)||0;
+  var n=new Date();
+  var ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  if(!s.monthlyGoals) s.monthlyGoals=[];
+  var idx2=s.monthlyGoals.findIndex(function(g){return g.month===ym;});
+  var entry={month:ym,goal:goal,achievement:ach};
+  if(idx2>=0) s.monthlyGoals[idx2]=entry;
+  else s.monthlyGoals.push(entry);
+  if(!s.goals) s.goals={};
+  s.goals.monthly=goal;
+  s.goals.dancer=dancer;
+  save();saveStudent(s);
+  showToast('✅ '+n.getFullYear()+'년 '+(n.getMonth()+1)+'월 목표 저장 완료!');
+}
+
+function weeklyAchChange(el,sid,ii){
+  var weekKey=el.getAttribute('data-wk');
+  saveItemAchievement(sid,weekKey,ii,el.value);
+}
+
 function submitPickupWish(){
   var s=DB.students.find(function(x){return x.id===pickupWishSid;});
   if(!s) return;
@@ -1829,7 +1857,7 @@ function renderWeeklyList(s){
         html+='<div style="position:relative;height:20px;display:flex;align-items:center">';
         html+='<div id="wbar-'+wi+'-'+ii+'" style="position:absolute;left:0;top:50%;transform:translateY(-50%);height:8px;width:'+ach+'%;background:'+color+';border-radius:4px;pointer-events:none;transition:width .1s,background .2s"></div>';
         html+='<div style="position:absolute;left:0;top:50%;transform:translateY(-50%);height:8px;width:100%;background:var(--light);border-radius:4px;z-index:0"></div>';
-        html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="position:absolute;width:100%;opacity:0;cursor:pointer;z-index:2;height:20px;margin:0">';
+        html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="position:absolute;width:100%;z-index:2;height:20px;margin:0;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer">';
         html+='</div>';
       } else {
         html+='<div style="background:var(--light);border-radius:4px;height:8px;overflow:hidden">';
