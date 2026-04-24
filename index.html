@@ -1007,6 +1007,14 @@ function renderNoticeBar(){
 }
 
 // ── 누락된 상수 및 함수 복구 ──
+function pctColor(v){
+  v=parseInt(v)||0;
+  if(v<25) return '#ef4444';
+  if(v<50) return '#f97316';
+  if(v<75) return '#eab308';
+  return '#22c55e';
+}
+
 const POSTIT_COLORS=['#fef08a','#bbf7d0','#bfdbfe','#fecdd3','#e9d5ff','#fed7aa','#a5f3fc','#fde68a'];
 
 function updAlertDot(){
@@ -1063,12 +1071,11 @@ var pickupWishSid=null;
 function goalRangeInput(el){
   var sid=el.getAttribute('data-sid');
   var v=parseInt(el.value)||0;
+  var color=pctColor(v);
   var pct=document.getElementById('goal-pct-'+sid);
   var bar=document.getElementById('goal-bar-'+sid);
-  if(pct) pct.textContent=v+'%';
-  if(bar) bar.style.width=v+'%';
-  // range 자체 배경색도 업데이트
-  el.style.background='linear-gradient(to right, var(--pink) '+v+'%, var(--light) '+v+'%)';
+  if(pct){pct.textContent=v+'%';pct.style.color=color;}
+  if(bar){bar.style.width=v+'%';bar.style.background=color;}
 }
 
 function weeklyToggle(el){
@@ -1662,69 +1669,56 @@ function renderMonthlyGoalCard(s){
   var ymLabel=n.getFullYear()+'년 '+(n.getMonth()+1)+'월';
   var goals=s.monthlyGoals||[];
   var cur=goals.find(function(g){return g.month===ym;})||{month:ym,goal:'',achievement:0};
-  var prev=goals.filter(function(g){return g.month!==ym;}).sort(function(a,b){return b.month.localeCompare(a.month);}).slice(0,5);
+  var prev=goals.filter(function(g){return g.month!==ym;}).sort(function(a,b){return b.month.localeCompare(a.month);});
   var ach=cur.achievement||0;
+  var color=pctColor(ach);
   var parts=[];
   parts.push('<div class="card">');
-  parts.push('<div class="card-head"><div class="card-title">✨ 이달의 목표</div><span style="font-size:11px;color:var(--gray)">'+ymLabel+'</span></div>');
+  parts.push('<div class="card-head"><div class="card-title">✨ '+ymLabel+' 목표</div></div>');
   parts.push('<div class="card-body">');
   parts.push('<div class="form-row"><label class="form-label">이달 목표</label>');
-  parts.push('<textarea id="goal-monthly-'+s.id+'" placeholder="이달에 이루고 싶은 것을 적어보세요" style="min-height:80px">'+esc(cur.goal)+'</textarea></div>');
-  parts.push('<div class="form-row"><label class="form-label">달성률 <span id="goal-pct-'+s.id+'">'+ach+'%</span></label>');
-  parts.push('<input type="range" id="goal-ach-'+s.id+'" data-sid="'+s.id+'" min="0" max="100" value="'+ach+'" style="width:100%" oninput="goalRangeInput(this)">');
-  parts.push('<div style="background:var(--light);border-radius:20px;height:8px;margin-top:6px;overflow:hidden"><div id="goal-bar-'+s.id+'" style="background:var(--pink);height:100%;width:'+ach+'%;border-radius:20px;transition:width .3s"></div></div></div>');
+  parts.push('<textarea id="goal-monthly-'+s.id+'" placeholder="'+ymLabel+'에 이루고 싶은 것을 적어보세요" style="min-height:80px">'+esc(cur.goal)+'</textarea></div>');
+  // 달성률 슬라이더 (한줄, 색상)
+  parts.push('<div class="form-row"><label class="form-label">달성률 <span id="goal-pct-'+s.id+'" style="color:'+color+';font-weight:800">'+ach+'%</span></label>');
+  parts.push('<div style="position:relative;height:22px;display:flex;align-items:center;margin-top:4px">');
+  parts.push('<div style="position:absolute;width:100%;height:10px;background:var(--light);border-radius:5px;top:50%;transform:translateY(-50%)"></div>');
+  parts.push('<div id="goal-bar-'+s.id+'" style="position:absolute;height:10px;background:'+color+';border-radius:5px;top:50%;transform:translateY(-50%);width:'+ach+'%;transition:width .1s,background .2s;pointer-events:none"></div>');
+  parts.push('<input type="range" id="goal-ach-'+s.id+'" data-sid="'+s.id+'" min="0" max="100" value="'+ach+'" style="position:absolute;width:100%;opacity:0;cursor:pointer;z-index:2;height:22px;margin:0" oninput="goalRangeInput(this)" onchange="saveMonthlyAch('+s.id+',this.value)">');
+  parts.push('</div></div>');
   parts.push('<div class="form-row" style="margin-bottom:8px"><label class="form-label">댄서로서의 목표</label>');
   parts.push('<textarea id="goal-dancer-'+s.id+'" placeholder="댄서로서 궁극적인 목표를 적어보세요">'+esc(s.goals&&s.goals.dancer||'')+'</textarea></div>');
-  parts.push('<button class="btn btn-pink" onclick="saveMonthlyGoalBtn('+s.id+')" style="width:100%">저장하기</button>');
-  // 지난 목표
+  parts.push('<button class="btn btn-pink" onclick="saveMonthlyGoalBtn('+s.id+')" style="width:100%;margin-top:4px">저장하기</button>');
+  // 지난 달 기록 (접혀있음)
   if(prev.length){
     parts.push('<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px">');
-    parts.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">');
-    parts.push('<div style="font-size:11px;font-weight:800;color:var(--gray)">📅 지난 목표 기록</div>');
-    parts.push('<button onclick="togglePrevGoals('+s.id+')" id="prev-goals-btn-'+s.id+'" style="background:none;border:none;font-size:11px;color:var(--blue);cursor:pointer">펼치기</button>');
-    parts.push('</div>');
-    parts.push('<div id="prev-goals-'+s.id+'" style="display:none">');
+    parts.push('<div style="font-size:11px;font-weight:800;color:var(--gray);margin-bottom:8px">📅 지난 목표 기록</div>');
     prev.forEach(function(g){
       var ga=g.achievement||0;
-      parts.push('<div style="background:var(--light);border-radius:8px;padding:8px 10px;margin-bottom:6px">');
-      parts.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:11px;font-weight:700;color:var(--gray)">'+g.month+'</span><span style="font-size:12px;font-weight:800;color:var(--pink)">'+ga+'%</span></div>');
-      parts.push('<div style="font-size:12px">'+esc(g.goal)+'</div>');
-      parts.push('<div style="background:var(--border);border-radius:20px;height:5px;margin-top:5px;overflow:hidden"><div style="background:var(--pink);height:100%;width:'+ga+'%;border-radius:20px"></div></div>');
-      parts.push('</div>');
+      var gc=pctColor(ga);
+      var monthLabel=g.month;
+      try{var gd=new Date(g.month+'-01');monthLabel=gd.getFullYear()+'년 '+(gd.getMonth()+1)+'월';}catch(e){}
+      var detailId='goal-detail-'+s.id+'-'+g.month.replace('-','');
+      parts.push('<div style="margin-bottom:6px">');
+      parts.push('<div onclick="toggleGoalDetail(\'' +detailId+ '\')" style="background:var(--light);border-radius:8px;padding:8px 12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">');
+      parts.push('<div><span style="font-size:12px;font-weight:700;color:var(--gray)">'+monthLabel+'</span></div>');
+      parts.push('<div style="display:flex;align-items:center;gap:8px">');
+      parts.push('<span style="font-size:12px;font-weight:800;color:'+gc+'">'+ga+'%</span>');
+      parts.push('<span style="font-size:10px;color:var(--gray)">›</span></div></div>');
+      parts.push('<div id="'+detailId+'" style="display:none;padding:8px 12px;background:#fafafa;border-radius:0 0 8px 8px;border:1px solid var(--border);border-top:none">');
+      parts.push('<div style="font-size:12px;line-height:1.6;margin-bottom:6px">'+esc(g.goal||'(목표 없음)')+'</div>');
+      parts.push('<div style="background:var(--light);border-radius:4px;height:8px;overflow:hidden"><div style="background:'+gc+';height:100%;width:'+ga+'%;border-radius:4px"></div></div>');
+      parts.push('</div></div>');
     });
-    parts.push('</div></div>');
+    parts.push('</div>');
   }
   parts.push('</div></div>');
   return parts.join('');
 }
 
-function togglePrevGoals(sid){
-  var el=document.getElementById('prev-goals-'+sid);
-  var btn=document.getElementById('prev-goals-btn-'+sid);
+function toggleGoalDetail(id){
+  var el=document.getElementById(id);
   if(!el) return;
-  var isHidden=el.style.display==='none';
-  el.style.display=isHidden?'block':'none';
-  if(btn) btn.textContent=isHidden?'접기':'펼치기';
-}
-
-function saveMonthlyGoalBtn(sid){
-  var s=DB.students.find(function(x){return x.id===sid;});
-  if(!s) return;
-  var goal=(document.getElementById('goal-monthly-'+sid)||{value:''}).value||'';
-  var dancer=(document.getElementById('goal-dancer-'+sid)||{value:''}).value||'';
-  var ach=parseInt((document.getElementById('goal-ach-'+sid)||{value:0}).value)||0;
-  var n=new Date();
-  var ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
-  if(!s.monthlyGoals) s.monthlyGoals=[];
-  var idx=s.monthlyGoals.findIndex(function(g){return g.month===ym;});
-  var entry={month:ym,goal:goal,achievement:ach};
-  if(idx>=0) s.monthlyGoals[idx]=entry;
-  else s.monthlyGoals.push(entry);
-  if(!s.goals) s.goals={};
-  s.goals.monthly=goal;
-  s.goals.dancer=dancer;
-  save();saveStudent(s);
-  showToast('✅ 이달의 목표 저장!');
+  el.style.display=el.style.display==='none'?'block':'none';
 }
 
 
@@ -1801,61 +1795,61 @@ function getWeekKey(offsetWeeks){
 function renderWeeklyList(s){
   var weeks=s.weeklies||[];
   if(!weeks.length) return '<div class="empty-msg" style="padding:16px;font-size:13px">"이번 주 작성" 버튼으로 체크리스트를 만들어보세요 💪</div>';
-  var sorted=[...weeks].sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);}).slice(0,4);
+  var sorted=[...weeks].sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);}).slice(0,10);
   var html='';
   sorted.forEach(function(w,wi){
     var isThisWeek=wi===0;
     var total=w.items.length;
-    // 전체 달성률 = 각 항목 달성률 평균
     var avgPct=total?Math.round(w.items.reduce(function(sum,i){return sum+(i.achievement||0);},0)/total):0;
-    var color=avgPct>=80?'var(--green)':avgPct>=50?'var(--amber)':'var(--pink)';
-    html+='<div style="border-bottom:1px solid var(--border);padding:11px 14px">';
-    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-    html+='<div><div style="font-size:12px;font-weight:800;color:'+(isThisWeek?'var(--pink)':'var(--gray)')+'">'+( isThisWeek?'📍 이번 주':'지난 주')+' · '+w.weekLabel+'</div>';
-    html+='<div style="font-size:11px;color:var(--gray);margin-top:1px">평균 '+avgPct+'% 달성</div></div>';
-    html+='<div style="width:36px;height:36px;position:relative">';
-    html+='<svg viewBox="0 0 36 36" style="transform:rotate(-90deg);width:36px;height:36px">';
+    var avgColor=pctColor(avgPct);
+    // 헤더 (클릭하면 펼치기/접기)
+    html+='<div style="border-bottom:1px solid var(--border)">';
+    html+='<div onclick="toggleWeekSection(this)" style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:'+(isThisWeek?'default':'pointer')+'">';
+    html+='<div><div style="font-size:12px;font-weight:800;color:'+(isThisWeek?'var(--pink)':'var(--gray)')+'">'+( isThisWeek?'📍 이번 주':'📁 지난 주')+' · '+w.weekLabel+'</div>';
+    html+='<div style="font-size:11px;color:'+avgColor+';margin-top:1px;font-weight:700">평균 '+avgPct+'% 달성</div></div>';
+    html+='<div style="display:flex;align-items:center;gap:8px">';
+    html+='<div style="width:34px;height:34px;position:relative"><svg viewBox="0 0 36 36" style="transform:rotate(-90deg);width:34px;height:34px">';
     html+='<circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" stroke-width="3"/>';
-    html+='<circle cx="18" cy="18" r="15" fill="none" stroke="'+color+'" stroke-width="3" stroke-dasharray="'+Math.round(avgPct*0.942)+' 94.2" stroke-linecap="round"/>';
-    html+='</svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:var(--black)">'+avgPct+'%</div></div></div>';
-    // 항목들 - 체크박스 없이 달성률만
+    html+='<circle cx="18" cy="18" r="15" fill="none" stroke="'+avgColor+'" stroke-width="3" stroke-dasharray="'+Math.round(avgPct*0.942)+' 94.2" stroke-linecap="round"/>';
+    html+='</svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:var(--black)">'+avgPct+'%</div></div>';
+    if(!isThisWeek) html+='<span style="font-size:16px;color:var(--gray)">›</span>';
+    html+='</div></div>';
+    // 항목들 (이번주는 항상 펼침, 지난주는 접힘)
+    html+='<div class="week-items" style="display:'+(isThisWeek?'block':'none')+';padding:0 14px 10px">';
     w.items.forEach(function(item,ii){
       var ach=item.achievement||0;
-      html+='<div style="padding:7px 0;border-bottom:1px solid var(--border)">';
-      html+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">';
-      html+='<div style="flex:1;font-size:13px;font-weight:600">'+esc(item.text)+'</div>';
-      html+='<span id="wpct-'+wi+'-'+ii+'" style="font-size:12px;font-weight:800;color:var(--pink);min-width:36px;text-align:right">'+ach+'%</span>';
+      var color=pctColor(ach);
+      html+='<div style="padding:8px 0;border-bottom:1px solid var(--light)">';
+      html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+      html+='<div style="font-size:13px;font-weight:600">'+esc(item.text)+'</div>';
+      html+='<span id="wpct-'+wi+'-'+ii+'" style="font-size:12px;font-weight:800;color:'+color+';min-width:36px;text-align:right">'+ach+'%</span>';
       html+='</div>';
-      // 달성률 슬라이더 (이번주만)
+      // 슬라이더 한 줄 (배경이 게이지 역할)
       if(isThisWeek){
-        html+='<div style="display:flex;align-items:center;gap:8px">';
-        html+='<div style="flex:1;background:var(--light);border-radius:20px;height:8px;overflow:hidden;cursor:pointer;position:relative">';
-        html+='<div id="wbar-'+wi+'-'+ii+'" style="background:var(--pink);height:100%;width:'+ach+'%;border-radius:20px;transition:width .1s"></div></div>';
+        html+='<div style="position:relative;height:20px;display:flex;align-items:center">';
+        html+='<div id="wbar-'+wi+'-'+ii+'" style="position:absolute;left:0;top:50%;transform:translateY(-50%);height:8px;width:'+ach+'%;background:'+color+';border-radius:4px;pointer-events:none;transition:width .1s,background .2s"></div>';
+        html+='<div style="position:absolute;left:0;top:50%;transform:translateY(-50%);height:8px;width:100%;background:var(--light);border-radius:4px;z-index:0"></div>';
+        html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="position:absolute;width:100%;opacity:0;cursor:pointer;z-index:2;height:20px;margin:0">';
         html+='</div>';
-        html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="width:100%;margin-top:4px;background:linear-gradient(to right,var(--pink) '+ach+'%,var(--light) '+ach+'%)">';
       } else {
-        // 지난주는 게이지바만
-        html+='<div style="background:var(--light);border-radius:20px;height:8px;overflow:hidden">';
-        html+='<div style="background:var(--pink);height:100%;width:'+ach+'%;border-radius:20px"></div></div>';
+        html+='<div style="background:var(--light);border-radius:4px;height:8px;overflow:hidden">';
+        html+='<div style="background:'+color+';height:100%;width:'+ach+'%;border-radius:4px"></div></div>';
       }
       html+='</div>';
     });
-    html+='</div>';
+    html+='</div></div>';
   });
-  // 이벤트 위임
   setTimeout(function(){
     document.querySelectorAll('.wk-ach').forEach(function(el){
       el.oninput=function(){
         var wi=parseInt(this.getAttribute('data-wi'));
         var ii=parseInt(this.getAttribute('data-ii'));
-        var v=this.value;
+        var v=parseInt(this.value)||0;
+        var color=pctColor(v);
         var sp=document.getElementById('wpct-'+wi+'-'+ii);
         var bar=document.getElementById('wbar-'+wi+'-'+ii);
-        if(sp) sp.textContent=v+'%';
-        if(bar) bar.style.width=v+'%';
-        this.style.background='linear-gradient(to right,var(--pink) '+v+'%,var(--light) '+v+'%)';
-        // 평균 업데이트
-        updateWeeklyAvg(wi);
+        if(sp){sp.textContent=v+'%';sp.style.color=color;}
+        if(bar){bar.style.width=v+'%';bar.style.background=color;}
       };
       el.onchange=function(){
         var sid=parseInt(this.getAttribute('data-sid'));
@@ -1865,9 +1859,25 @@ function renderWeeklyList(s){
         if(sorted2[wi]) saveItemAchievement(sid,sorted2[wi].weekKey,ii,this.value);
       };
     });
+    document.querySelectorAll('.week-items').forEach(function(el,i){
+      if(i>0){
+        var header=el.previousElementSibling;
+        if(header) header.onclick=function(){
+          var isOpen=el.style.display!=='none';
+          el.style.display=isOpen?'none':'block';
+          var arrow=this.querySelector('span:last-child');
+          if(arrow) arrow.textContent=isOpen?'›':'∨';
+        };
+      }
+    });
   },50);
   return html;
 }
+
+function toggleWeekSection(el){
+  // 이번주는 토글 없음
+}
+
 
 function updateWeeklyAvg(wi){
   // 해당 주의 모든 항목 퍼센트 평균 계산해서 원형 그래프 업데이트
@@ -2733,17 +2743,23 @@ function renderAdmResource(c){
       <div style="flex:1;min-width:0">
         <div style="font-weight:800;font-size:13px">${esc(r.title)}</div>
         ${r.url?`<div style="font-size:11px;color:var(--blue);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.url)}</div>`:''}
+        <div style="font-size:10px;color:var(--gray2)">${(r.comments||[]).length}개 댓글</div>
       </div>
+      <button class="edt-btn" onclick="editResource('${r.id}')" style="margin-right:4px">수정</button>
       <button class="del-btn" onclick="delResource('${r.id}')">삭제</button>
     </div>`).join('')}
   </div>
   <div class="card">
-    <div class="card-head"><div class="card-title">+ 새 영상/지식 추가</div></div>
+    <div class="card-head"><div class="card-title" id="res-form-title">+ 새 항목 추가</div></div>
     <div class="card-body">
+      <input type="hidden" id="res-edit-id">
       <div class="form-row"><label class="form-label">제목 *</label><input type="text" id="res-title" placeholder="예: 힙합 기초 - 락킹 입문 영상"></div>
       <div class="form-row"><label class="form-label">URL (유튜브/링크)</label><input type="url" id="res-url" placeholder="https://youtube.com/..."></div>
       <div class="form-row"><label class="form-label">설명</label><textarea id="res-desc" placeholder="간단한 설명을 입력하세요" style="min-height:70px"></textarea></div>
-      <button class="btn btn-pink" onclick="addResource()">추가하기</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-pink" onclick="addResource()">저장하기</button>
+        <button class="btn btn-gray" id="res-cancel-btn" onclick="cancelEditResource()" style="display:none">취소</button>
+      </div>
     </div>
   </div>`;
 }
@@ -2858,19 +2874,47 @@ function delResourceComment(resId,comId){
 }
 
 function addResource(){
-  const title=document.getElementById('res-title').value.trim();
-  const url=document.getElementById('res-url').value.trim();
-  const desc=document.getElementById('res-desc').value.trim();
-  if(!title){alert('제목을 입력해주세요');return}
-  if(!DB.resources) DB.resources=[];
-  const now=new Date();
-  const time=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  const r={id:'res'+Date.now(),title,url,desc,time};
-  DB.resources.push(r);
-  if(window.fb) window.fb.saveResource(r);
-  showToast('✅ 추가 완료!');
+  var editId=document.getElementById('res-edit-id')&&document.getElementById('res-edit-id').value;
+  var title=document.getElementById('res-title').value.trim();
+  var url=document.getElementById('res-url').value.trim();
+  var desc=document.getElementById('res-desc').value.trim();
+  if(!title){alert('제목을 입력해주세요');return;}
+  var now=new Date();
+  var time=(now.getMonth()+1)+'/'+now.getDate()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  if(editId){
+    // 수정
+    var r=(DB.resources||[]).find(function(x){return x.id===editId;});
+    if(r){r.title=title;r.url=url;r.desc=desc;if(window.fb) window.fb.saveResource(r);}
+  } else {
+    // 새 추가
+    if(!DB.resources) DB.resources=[];
+    var newR={id:'res'+Date.now(),title:title,url:url,desc:desc,time:time,comments:[]};
+    DB.resources.push(newR);
+    if(window.fb) window.fb.saveResource(newR);
+  }
+  showToast(editId?'✅ 수정 완료!':'✅ 추가 완료!');
   renderAdmContent();
 }
+function editResource(id){
+  var r=(DB.resources||[]).find(function(x){return x.id===id;});
+  if(!r) return;
+  document.getElementById('res-edit-id').value=id;
+  document.getElementById('res-title').value=r.title||'';
+  document.getElementById('res-url').value=r.url||'';
+  document.getElementById('res-desc').value=r.desc||'';
+  document.getElementById('res-form-title').textContent='✏️ 수정하기';
+  document.getElementById('res-cancel-btn').style.display='inline-block';
+  document.getElementById('res-title').focus();
+}
+function cancelEditResource(){
+  document.getElementById('res-edit-id').value='';
+  document.getElementById('res-title').value='';
+  document.getElementById('res-url').value='';
+  document.getElementById('res-desc').value='';
+  document.getElementById('res-form-title').textContent='+ 새 항목 추가';
+  document.getElementById('res-cancel-btn').style.display='none';
+}
+
 function delResource(id){
   if(!confirm('삭제하시겠습니까?')) return;
   DB.resources=(DB.resources||[]).filter(x=>x.id!==id);
