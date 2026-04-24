@@ -1431,7 +1431,7 @@ function openMsgDetail(id){
             <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
               <span class="reply-author" style="color:${r.isTeacher?'var(--pink)':'var(--black)'}">${r.isTeacher?'👑 ':''}${esc(r.author)}</span>
               <span class="reply-time">${r.time}</span>
-              ${isAdmin?`<button onclick="delReply('${id}','${r.id}')" style="background:none;border:none;color:var(--gray2);cursor:pointer;font-size:14px;padding:0;margin-left:2px">×</button>`:''}
+              <button onclick="confirmDelReply('${id}','${r.id}','${r.author}',${r.isTeacher||false})" style="background:none;border:none;color:var(--gray2);cursor:pointer;font-size:14px;padding:0;margin-left:2px">×</button>
             </div>
             <div class="reply-content">${esc(r.content).replace(/\n/g,'<br>')}</div>
           </div>
@@ -1441,7 +1441,7 @@ function openMsgDetail(id){
     <div class="modal-foot" style="display:flex;gap:8px">
       <button class="btn btn-outline" onclick="closeM('modal-msg-detail')" style="flex:1;padding:11px;font-size:13px">닫기</button>
       <button class="btn btn-pink" onclick="openReplyModal('${id}')" style="flex:1;padding:11px;font-size:13px">💬 댓글 달기</button>
-      ${isAdmin?`<button class="btn btn-gray" onclick="delMsg('${id}')" style="flex:0 0 auto;padding:11px 14px;font-size:13px">삭제</button>`:''}
+      <button class="btn btn-gray" onclick="confirmDelMsg('${id}','${m.author}',${m.isTeacher||false})" style="flex:0 0 auto;padding:11px 14px;font-size:13px">삭제</button>
     </div>
   </div>`;
   openM('modal-msg-detail');
@@ -1548,9 +1548,50 @@ function submitReply(){
   setTimeout(()=>openMsgDetail(currentMsgId),100);
 }
 
+function confirmDelMsg(id, author, isTeacher){
+  // 관리자는 바로 삭제
+  if(isAdmin){
+    if(confirm('삭제하시겠습니까?')) delMsg(id);
+    return;
+  }
+  // 선생님 글은 관리자만
+  if(isTeacher){
+    var pw=prompt('관리자 비밀번호를 입력하세요:');
+    if(pw===null) return;
+    if(pw!==DB.adminPw){alert('비밀번호가 틀렸습니다');return;}
+    delMsg(id);
+    return;
+  }
+  // 학생 글은 본인 비밀번호
+  var pw=prompt('본인 비밀번호를 입력하세요 (4자리):');
+  if(pw===null) return;
+  var s=DB.students.find(function(x){return x.name===author;});
+  if(!s){alert('학생 정보를 찾을 수 없습니다');return;}
+  if(pw!==s.pw && pw!=='7878'){alert('비밀번호가 틀렸습니다');return;}
+  delMsg(id);
+}
 function delMsg(id){
   DB.messages=(DB.messages||[]).filter(x=>x.id!==id);
   save('message');closeM('modal-msg-detail');renderMsgBoard();
+}
+function confirmDelReply(msgId, repId, author, isTeacher){
+  if(isAdmin){
+    delReply(msgId, repId);
+    return;
+  }
+  if(isTeacher){
+    var pw=prompt('관리자 비밀번호를 입력하세요:');
+    if(pw===null) return;
+    if(pw!==DB.adminPw){alert('비밀번호가 틀렸습니다');return;}
+    delReply(msgId, repId);
+    return;
+  }
+  var pw=prompt('본인 비밀번호를 입력하세요 (4자리):');
+  if(pw===null) return;
+  var s=DB.students.find(function(x){return x.name===author;});
+  if(!s){alert('학생 정보를 찾을 수 없습니다');return;}
+  if(pw!==s.pw && pw!=='7878'){alert('비밀번호가 틀렸습니다');return;}
+  delReply(msgId, repId);
 }
 function delReply(msgId,repId){
   const m=(DB.messages||[]).find(x=>x.id===msgId);
