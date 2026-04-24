@@ -7,6 +7,7 @@
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#D4006A">
 <title>JB DANCE 입시반</title>
@@ -804,6 +805,27 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
 </div>
 
+<!-- 질문 답장 모달 -->
+<div class="modal-overlay" id="modal-req-reply" onclick="if(event.target===this)closeM('modal-req-reply')">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">💬 질문 답장</div>
+      <button class="close-btn" onclick="closeM('modal-req-reply')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="req-reply-original" style="background:var(--light);border-radius:8px;padding:10px;margin-bottom:12px;font-size:13px;color:var(--gray)"></div>
+      <div class="form-row">
+        <label class="form-label">답장 내용</label>
+        <textarea id="req-reply-content" placeholder="학생 질문에 대한 답장을 입력하세요" style="min-height:100px"></textarea>
+      </div>
+      <div style="font-size:11px;color:var(--gray);margin-top:4px">💡 답장은 학생 개인 페이지 "선생님의 한마디"에도 함께 전달됩니다</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-pink" onclick="submitReqReply()">답장 보내기</button>
+    </div>
+  </div>
+</div>
+
 <!-- 전체 메시지 모달 -->
 <div class="modal-overlay" id="modal-broadcast" onclick="if(event.target===this)closeM('modal-broadcast')">
   <div class="modal">
@@ -1190,6 +1212,44 @@ function submitPickupWish(){
   closeM('modal-pickup-wish');
   var cs=DB.students.find(function(x){return x.id===curSid;});
   if(cs) renderProfile(cs);
+}
+
+var curReqReplyId=null;
+function openReplyToReq(reqId){
+  curReqReplyId=reqId;
+  var r=DB.requests.find(function(x){return x.id===reqId;});
+  if(!r) return;
+  var orig=document.getElementById('req-reply-original');
+  if(orig) orig.textContent=r.studentName+': '+r.reason;
+  var inp=document.getElementById('req-reply-content');
+  if(inp) inp.value=r.reply||'';
+  openM('modal-req-reply');
+}
+function submitReqReply(){
+  var r=DB.requests.find(function(x){return x.id===curReqReplyId;});
+  if(!r) return;
+  var content=document.getElementById('req-reply-content').value.trim();
+  if(!content){alert('답장 내용을 입력해주세요');return;}
+  // 신청에 답장 저장
+  r.reply=content;
+  if(window.fb) window.fb.saveRequest(r);
+  // 학생의 선생님 한마디에도 전달
+  var s=DB.students.find(function(x){return x.id===r.studentId;});
+  if(s){
+    if(!s.teacherMessages) s.teacherMessages=[];
+    var now=new Date();
+    var date=(now.getMonth()+1)+'/'+now.getDate()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+    s.teacherMessages.push({
+      id:'tm'+Date.now(),
+      content:'[질문 답장] '+r.reason+'\n\n→ '+content,
+      date:date,
+      read:false
+    });
+    saveStudent(s);
+  }
+  showToast('✅ 답장 전송 완료!');
+  closeM('modal-req-reply');
+  renderAdmContent();
 }
 
 function openBroadcastModal(){
@@ -2400,19 +2460,25 @@ function renderMyRequests(s){
     parts.push('<button onclick="openPickupWishModal('+s.id+')" style="margin-top:6px;background:none;border:1px solid #0369a1;color:#0369a1;border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;font-family:inherit">수정</button>');
     parts.push('</div>');
   }
-  // 질문 기록
+  // 질문 기록 + 답장
   if(myReqs.length){
     parts.push('<div style="font-size:11px;font-weight:800;color:var(--gray);margin-bottom:6px">📩 내가 보낸 질문</div>');
     myReqs.forEach(function(r){
-      parts.push('<div style="background:var(--light);border-radius:8px;padding:8px 11px;margin-bottom:6px">');
-      parts.push('<div style="font-size:11px;color:var(--gray);margin-bottom:3px">'+r.date+'</div>');
+      var hasReply=r.reply&&r.reply.trim();
+      parts.push('<div style="background:var(--light);border-radius:8px;padding:8px 11px;margin-bottom:6px;border-left:3px solid '+(hasReply?'#22c55e':'var(--border)')+'">' );
+      parts.push('<div style="font-size:11px;color:var(--gray);margin-bottom:3px">'+r.date+(hasReply?' · ✅ 답장 있음':'')+'</div>');
       parts.push('<div style="font-size:13px">'+esc(r.reason)+'</div>');
-      parts.push('<button onclick="editMyReq(\'' +r.id+'\',\'' +esc(r.reason)+'\')" style="margin-top:5px;background:none;border:1px solid var(--border);border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer;font-family:inherit">수정</button>');
+      if(hasReply){
+        parts.push('<div style="margin-top:6px;background:#f0fdf4;border-radius:6px;padding:6px 8px">');
+        parts.push('<div style="font-size:10px;font-weight:800;color:#166534;margin-bottom:2px">💬 선생님 답장</div>');
+        parts.push('<div style="font-size:12px;color:#166534">'+esc(r.reply)+'</div></div>');
+      }
       parts.push('</div>');
     });
   }
   return parts.join('');
 }
+
 function editMyReq(reqId, currentReason){
   var newReason=prompt('질문 내용을 수정하세요:', currentReason);
   if(newReason===null) return;
@@ -2811,9 +2877,13 @@ function renderAdmRequests(c){
     <span class="req-tag ${r.type}">${tl[r.type]||r.type}</span>
     <div style="font-weight:800;font-size:14px;margin-bottom:3px">${esc(r.studentName)}</div>
     <div style="font-size:13px;color:var(--gray);margin-bottom:6px">${esc(r.reason)}</div>
+    ${r.reply?`<div style="background:#f0fdf4;border-left:3px solid #22c55e;padding:6px 10px;border-radius:0 6px 6px 0;margin-bottom:6px;font-size:12px;color:#166534">💬 답장: ${esc(r.reply)}</div>`:''}
     <div style="display:flex;align-items:center;justify-content:space-between">
       <span style="font-size:11px;color:var(--gray2)">${r.date}</span>
-      <button class="del-btn" onclick="delReq('${r.id}')">삭제</button>
+      <div style="display:flex;gap:6px">
+        <button onclick="openReplyToReq('${r.id}')" style="background:var(--pink-bg);border:1px solid #fbb6d8;color:var(--pink);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit">답장</button>
+        <button class="del-btn" onclick="delReq('${r.id}')">삭제</button>
+      </div>
     </div>
   </div>`).join('');
   c.innerHTML=wishHtml+'<div class="adm-section"><div style="padding:10px 13px;background:var(--pink-bg);border-bottom:1px solid var(--border);font-weight:800;font-size:13px;color:var(--pink)">💬 질문 신청 내역</div>'+reqHtml+'</div>';
