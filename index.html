@@ -742,6 +742,33 @@ textarea{resize:vertical;min-height:80px}
   </div>
 </div>
 
+<!-- 픽업수업 희망신청 모달 -->
+<div class="modal-overlay" id="modal-pickup-wish" onclick="if(event.target===this)closeM('modal-pickup-wish')">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">🌟 다음달 픽업수업 희망신청</div>
+      <button class="close-btn" onclick="closeM('modal-pickup-wish')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--gray);margin-bottom:12px">다음달 듣고 싶은 픽업수업을 선택해주세요. 선생님이 배정 시 참고할게요!</div>
+      <div class="form-row">
+        <label class="form-label">희망 수업 선택</label>
+        <select id="pickup-wish-select">
+          <option value="">— 수업 선택 —</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">한마디 (선택)</label>
+        <textarea id="pickup-wish-note" placeholder="예: 꼭 듣고 싶어요! / 일정이 맞으면 좋겠어요" style="min-height:70px"></textarea>
+      </div>
+      <div id="pickup-wish-current" style="margin-top:8px;padding:10px;background:var(--light);border-radius:8px;font-size:12px;color:var(--gray)"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-pink" onclick="submitPickupWish()">신청하기</button>
+    </div>
+  </div>
+</div>
+
 <!-- 선생님의 한마디 모달 -->
 <div class="modal-overlay" id="modal-teacher-msg" onclick="if(event.target===this)closeM('modal-teacher-msg')">
   <div class="modal">
@@ -1344,7 +1371,7 @@ function renderProfile(s){
   </div>
 
   <!-- 이달의 목표 -->
-  \${renderMonthlyGoalCard(s)}
+  ${renderMonthlyGoalCard(s)}
 
   <!-- 주간 체크리스트 -->
   <div class="card">
@@ -1431,14 +1458,14 @@ function renderProfile(s){
     <div class="card-head"><div class="card-title">📝 신청하기</div></div>
     <div class="card-body">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
-        <button class="btn btn-outline" style="padding:11px;font-size:13px" onclick="openReqModal('change')">📋 수업변경 신청</button>
+        <button class="btn btn-outline" style="padding:11px;font-size:13px" onclick="openPickupWishModal(${s.id})">🌟 픽업수업 희망신청</button>
         <button class="btn btn-outline" style="padding:11px;font-size:13px" onclick="openReqModal('question')">🙋 선생님께 질문</button>
       </div>
     </div>
   </div>
 
   <!-- 선생님의 한마디 -->
-  \${renderTeacherMessages(s)}
+  ${renderTeacherMessages(s)}
 
   <!-- 인바디 -->
   <div class="card">
@@ -1558,49 +1585,81 @@ function renderWeeklyList(s){
   var weeks=s.weeklies||[];
   if(!weeks.length) return '<div class="empty-msg" style="padding:16px;font-size:13px">"이번 주 작성" 버튼으로 체크리스트를 만들어보세요 💪</div>';
   var sorted=[...weeks].sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);}).slice(0,4);
-  return sorted.map(function(w,wi){
+  var html='';
+  sorted.forEach(function(w,wi){
     var isThisWeek=wi===0;
     var total=w.items.length;
     var done=w.items.filter(function(i){return i.checked;}).length;
     var pct=total?Math.round(done/total*100):0;
     var color=pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--pink)';
-    var parts=[];
-    parts.push('<div style="border-bottom:1px solid var(--border);padding:11px 14px">');
-    parts.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">');
-    parts.push('<div><div style="font-size:12px;font-weight:800;color:'+(isThisWeek?'var(--pink)':'var(--gray)')+'">');
-    parts.push((isThisWeek?'📍 이번 주':'지난 주')+' · '+w.weekLabel+'</div>');
-    parts.push('<div style="font-size:11px;color:var(--gray);margin-top:1px">'+pct+'% 전체달성</div></div>');
-    parts.push('<div style="width:36px;height:36px;position:relative">');
-    parts.push('<svg viewBox="0 0 36 36" style="transform:rotate(-90deg);width:36px;height:36px">');
-    parts.push('<circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" stroke-width="3"/>');
-    parts.push('<circle cx="18" cy="18" r="15" fill="none" stroke="'+color+'" stroke-width="3" stroke-dasharray="'+Math.round(pct*0.942)+' 94.2" stroke-linecap="round"/>');
-    parts.push('</svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:var(--black)">'+pct+'%</div></div></div>');
+    html+='<div style="border-bottom:1px solid var(--border);padding:11px 14px">';
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+    html+='<div><div style="font-size:12px;font-weight:800;color:'+(isThisWeek?'var(--pink)':'var(--gray)')+'">'+( isThisWeek?'📍 이번 주':'지난 주')+' · '+w.weekLabel+'</div>';
+    html+='<div style="font-size:11px;color:var(--gray);margin-top:1px">'+pct+'% 전체달성</div></div>';
+    html+='<div style="width:36px;height:36px;position:relative">';
+    html+='<svg viewBox="0 0 36 36" style="transform:rotate(-90deg);width:36px;height:36px">';
+    html+='<circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" stroke-width="3"/>';
+    html+='<circle cx="18" cy="18" r="15" fill="none" stroke="'+color+'" stroke-width="3" stroke-dasharray="'+Math.round(pct*0.942)+' 94.2" stroke-linecap="round"/>';
+    html+='</svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:var(--black)">'+pct+'%</div></div></div>';
     w.items.forEach(function(item,ii){
       var ach=item.achievement||0;
-      var wk=JSON.stringify(w.weekKey);
-      var toggleFn=isThisWeek?'toggleWeekly('+s.id+','+wk+','+ii+')':'';
-      var achFn=isThisWeek?'saveItemAchievement('+s.id+','+wk+','+ii+',this.value)':'';
-      parts.push('<div style="padding:7px 0;border-bottom:1px solid var(--border)">');
-      parts.push('<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">');
-      parts.push('<div onclick="'+toggleFn+'" style="width:20px;height:20px;border-radius:50%;border:2px solid '+(item.checked?'var(--green)':'var(--gray2)')+';background:'+(item.checked?'var(--green)':'transparent')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:'+(isThisWeek?'pointer':'default')+'">');
-      parts.push(item.checked?'<span style="color:white;font-size:11px;font-weight:800">✓</span>':'');
-      parts.push('</div>');
-      parts.push('<div style="flex:1;font-size:13px;'+(item.checked?'text-decoration:line-through;color:var(--gray)':'font-weight:600')+'">'+esc(item.text)+'</div>');
-      parts.push('<span style="font-size:11px;font-weight:800;color:var(--pink)">'+ach+'%</span></div>');
+      var chkStyle='width:20px;height:20px;border-radius:50%;border:2px solid '+(item.checked?'var(--green)':'var(--gray2)')+';background:'+(item.checked?'var(--green)':'transparent')+';display:flex;align-items:center;justify-content:center;flex-shrink:0';
+      html+='<div style="padding:7px 0;border-bottom:1px solid var(--border)">';
+      html+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">';
       if(isThisWeek){
-        parts.push('<div style="display:flex;align-items:center;gap:6px;padding-left:29px">');
-        parts.push('<input type="range" min="0" max="100" value="'+ach+'" style="flex:1;height:4px" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="'+achFn+'">');
-        parts.push('<span style="font-size:10px;color:var(--gray);min-width:30px">'+ach+'%</span>');
-        parts.push('</div>');
+        html+='<div class="wk-chk" data-sid="'+s.id+'" data-wk="'+wi+'" data-ii="'+ii+'" style="'+chkStyle+';cursor:pointer">';
+      } else {
+        html+='<div style="'+chkStyle+'">';
       }
-      parts.push('</div>');
+      html+=item.checked?'<span style="color:white;font-size:11px;font-weight:800">✓</span>':'';
+      html+='</div>';
+      html+='<div style="flex:1;font-size:13px;'+(item.checked?'text-decoration:line-through;color:var(--gray)':'font-weight:600')+'">'+esc(item.text)+'</div>';
+      html+='<span id="wpct-'+wi+'-'+ii+'" style="font-size:11px;font-weight:800;color:var(--pink);min-width:32px;text-align:right">'+ach+'%</span>';
+      html+='</div>';
+      if(isThisWeek){
+        html+='<div style="padding-left:29px">';
+        html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="width:100%;height:4px">';
+        html+='</div>';
+      }
+      html+='</div>';
     });
-    parts.push('</div>');
-    return parts.join('');
-  }).join('');
+    html+='</div>';
+  });
+  // 이벤트 위임으로 처리
+  setTimeout(function(){
+    document.querySelectorAll('.wk-chk').forEach(function(el){
+      el.onclick=function(){
+        var sid=parseInt(this.getAttribute('data-sid'));
+        var wi=parseInt(this.getAttribute('data-wk'));
+        var ii=parseInt(this.getAttribute('data-ii'));
+        var sorted2=(s.weeklies||[]).sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);});
+        if(sorted2[wi]) toggleWeekly(sid,sorted2[wi].weekKey,ii);
+      };
+    });
+    document.querySelectorAll('.wk-ach').forEach(function(el){
+      el.oninput=function(){
+        var wi=parseInt(this.getAttribute('data-wi'));
+        var ii=parseInt(this.getAttribute('data-ii'));
+        var sp=document.getElementById('wpct-'+wi+'-'+ii);
+        if(sp) sp.textContent=this.value+'%';
+      };
+      el.onchange=function(){
+        var sid=parseInt(this.getAttribute('data-sid'));
+        var wi=parseInt(this.getAttribute('data-wi'));
+        var ii=parseInt(this.getAttribute('data-ii'));
+        var sorted2=(s.weeklies||[]).sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);});
+        if(sorted2[wi]) saveItemAchievement(sid,sorted2[wi].weekKey,ii,this.value);
+      };
+    });
+  },50);
+  return html;
 }
 
 
+function weeklyAchChange(el,sid,ii){
+  var weekKey=el.getAttribute('data-wk');
+  saveItemAchievement(sid,weekKey,ii,el.value);
+}
 function saveItemAchievement(sid,weekKey,ii,val){
   const s=DB.students.find(function(x){return x.id===sid;});
   if(!s||!s.weeklies) return;
