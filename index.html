@@ -460,6 +460,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
   <div class="content">
     <div id="notice-bar-wrap"></div>
+    <div id="events-bar-wrap"></div>
     <div id="resource-board-wrap"></div>
     <div id="message-board-wrap"></div>
     <div id="student-list-wrap"></div>
@@ -1021,8 +1022,33 @@ function updReqBadge(){
   if(b){b.textContent=n;b.style.display=n?'inline':'none';}
 }
 
+function renderEventsBar(){
+  var w=document.getElementById('events-bar-wrap');
+  if(!w) return;
+  var now=new Date();
+  var today=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  var events=(DB.events||[]).filter(function(e){return e.date>=today;}).sort(function(a,b){return a.date.localeCompare(b.date);}).slice(0,3);
+  if(!events.length){w.innerHTML='';return;}
+  var html='<div style="margin-bottom:10px">';
+  html+='<div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:6px;padding:0 2px">📅 다가오는 행사</div>';
+  events.forEach(function(ev){
+    var d=new Date(ev.date);
+    var diff=Math.round((d-now)/(1000*60*60*24));
+    var diffTxt=diff===0?'오늘':diff===1?'내일':diff+'일 후';
+    var isUrgent=diff<=3;
+    html+='<div onclick="showPage(&quot;page-schedule&quot;)" style="background:var(--white);border:1px solid var(--border);border-left:3px solid '+(isUrgent?'var(--red)':'var(--blue)')+';border-radius:10px;padding:9px 13px;margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:10px">';
+    html+='<div style="text-align:center;min-width:36px"><div style="font-size:10px;font-weight:800;color:'+(isUrgent?'var(--red)':'var(--blue)')+'">'+diffTxt+'</div></div>';
+    html+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800">'+esc(ev.name)+'</div>';
+    html+='<div style="font-size:11px;color:var(--gray);margin-top:1px">'+ev.date+(ev.memo?' · '+esc(ev.memo):'')+'</div></div>';
+    html+='<div style="color:var(--gray2);font-size:18px">›</div></div>';
+  });
+  html+='</div>';
+  w.innerHTML=html;
+}
+
 function renderMain(){
   renderNoticeBar();
+  renderEventsBar();
   renderResourceBoard();
   renderMsgBoard();
   renderStudentList();
@@ -1780,65 +1806,62 @@ function renderWeeklyList(s){
   sorted.forEach(function(w,wi){
     var isThisWeek=wi===0;
     var total=w.items.length;
-    var done=w.items.filter(function(i){return i.checked;}).length;
-    var pct=total?Math.round(done/total*100):0;
-    var color=pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--pink)';
+    // 전체 달성률 = 각 항목 달성률 평균
+    var avgPct=total?Math.round(w.items.reduce(function(sum,i){return sum+(i.achievement||0);},0)/total):0;
+    var color=avgPct>=80?'var(--green)':avgPct>=50?'var(--amber)':'var(--pink)';
     html+='<div style="border-bottom:1px solid var(--border);padding:11px 14px">';
     html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
     html+='<div><div style="font-size:12px;font-weight:800;color:'+(isThisWeek?'var(--pink)':'var(--gray)')+'">'+( isThisWeek?'📍 이번 주':'지난 주')+' · '+w.weekLabel+'</div>';
-    html+='<div style="font-size:11px;color:var(--gray);margin-top:1px">'+pct+'% 전체달성</div></div>';
+    html+='<div style="font-size:11px;color:var(--gray);margin-top:1px">평균 '+avgPct+'% 달성</div></div>';
     html+='<div style="width:36px;height:36px;position:relative">';
     html+='<svg viewBox="0 0 36 36" style="transform:rotate(-90deg);width:36px;height:36px">';
     html+='<circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" stroke-width="3"/>';
-    html+='<circle cx="18" cy="18" r="15" fill="none" stroke="'+color+'" stroke-width="3" stroke-dasharray="'+Math.round(pct*0.942)+' 94.2" stroke-linecap="round"/>';
-    html+='</svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:var(--black)">'+pct+'%</div></div></div>';
+    html+='<circle cx="18" cy="18" r="15" fill="none" stroke="'+color+'" stroke-width="3" stroke-dasharray="'+Math.round(avgPct*0.942)+' 94.2" stroke-linecap="round"/>';
+    html+='</svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:var(--black)">'+avgPct+'%</div></div></div>';
+    // 항목들 - 체크박스 없이 달성률만
     w.items.forEach(function(item,ii){
       var ach=item.achievement||0;
-      var chkStyle='width:20px;height:20px;border-radius:50%;border:2px solid '+(item.checked?'var(--green)':'var(--gray2)')+';background:'+(item.checked?'var(--green)':'transparent')+';display:flex;align-items:center;justify-content:center;flex-shrink:0';
       html+='<div style="padding:7px 0;border-bottom:1px solid var(--border)">';
-      html+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">';
-      if(isThisWeek){
-        html+='<div class="wk-chk" data-sid="'+s.id+'" data-wk="'+wi+'" data-ii="'+ii+'" style="'+chkStyle+';cursor:pointer">';
-      } else {
-        html+='<div style="'+chkStyle+'">';
-      }
-      html+=item.checked?'<span style="color:white;font-size:11px;font-weight:800">✓</span>':'';
+      html+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">';
+      html+='<div style="flex:1;font-size:13px;font-weight:600">'+esc(item.text)+'</div>';
+      html+='<span id="wpct-'+wi+'-'+ii+'" style="font-size:12px;font-weight:800;color:var(--pink);min-width:36px;text-align:right">'+ach+'%</span>';
       html+='</div>';
-      html+='<div style="flex:1;font-size:13px;'+(item.checked?'text-decoration:line-through;color:var(--gray)':'font-weight:600')+'">'+esc(item.text)+'</div>';
-      html+='<span id="wpct-'+wi+'-'+ii+'" style="font-size:11px;font-weight:800;color:var(--pink);min-width:32px;text-align:right">'+ach+'%</span>';
-      html+='</div>';
+      // 달성률 슬라이더 (이번주만)
       if(isThisWeek){
-        html+='<div style="padding-left:29px">';
-        html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="width:100%;background:linear-gradient(to right,var(--pink) '+ach+'%,var(--light) '+ach+'%)">';
+        html+='<div style="display:flex;align-items:center;gap:8px">';
+        html+='<div style="flex:1;background:var(--light);border-radius:20px;height:8px;overflow:hidden;cursor:pointer;position:relative">';
+        html+='<div id="wbar-'+wi+'-'+ii+'" style="background:var(--pink);height:100%;width:'+ach+'%;border-radius:20px;transition:width .1s"></div></div>';
         html+='</div>';
+        html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="width:100%;margin-top:4px;background:linear-gradient(to right,var(--pink) '+ach+'%,var(--light) '+ach+'%)">';
+      } else {
+        // 지난주는 게이지바만
+        html+='<div style="background:var(--light);border-radius:20px;height:8px;overflow:hidden">';
+        html+='<div style="background:var(--pink);height:100%;width:'+ach+'%;border-radius:20px"></div></div>';
       }
       html+='</div>';
     });
     html+='</div>';
   });
-  // 이벤트 위임으로 처리
+  // 이벤트 위임
   setTimeout(function(){
-    document.querySelectorAll('.wk-chk').forEach(function(el){
-      el.onclick=function(){
-        var sid=parseInt(this.getAttribute('data-sid'));
-        var wi=parseInt(this.getAttribute('data-wk'));
-        var ii=parseInt(this.getAttribute('data-ii'));
-        var sorted2=(s.weeklies||[]).sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);});
-        if(sorted2[wi]) toggleWeekly(sid,sorted2[wi].weekKey,ii);
-      };
-    });
     document.querySelectorAll('.wk-ach').forEach(function(el){
       el.oninput=function(){
         var wi=parseInt(this.getAttribute('data-wi'));
         var ii=parseInt(this.getAttribute('data-ii'));
+        var v=this.value;
         var sp=document.getElementById('wpct-'+wi+'-'+ii);
-        if(sp) sp.textContent=this.value+'%';
+        var bar=document.getElementById('wbar-'+wi+'-'+ii);
+        if(sp) sp.textContent=v+'%';
+        if(bar) bar.style.width=v+'%';
+        this.style.background='linear-gradient(to right,var(--pink) '+v+'%,var(--light) '+v+'%)';
+        // 평균 업데이트
+        updateWeeklyAvg(wi);
       };
       el.onchange=function(){
         var sid=parseInt(this.getAttribute('data-sid'));
         var wi=parseInt(this.getAttribute('data-wi'));
         var ii=parseInt(this.getAttribute('data-ii'));
-        var sorted2=(s.weeklies||[]).sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);});
+        var sorted2=(DB.students.find(function(x){return x.id===sid;})||{weeklies:[]}).weeklies.sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);});
         if(sorted2[wi]) saveItemAchievement(sid,sorted2[wi].weekKey,ii,this.value);
       };
     });
@@ -1846,11 +1869,19 @@ function renderWeeklyList(s){
   return html;
 }
 
-
-function weeklyAchChange(el,sid,ii){
-  var weekKey=el.getAttribute('data-wk');
-  saveItemAchievement(sid,weekKey,ii,el.value);
+function updateWeeklyAvg(wi){
+  // 해당 주의 모든 항목 퍼센트 평균 계산해서 원형 그래프 업데이트
+  var items=document.querySelectorAll('.wk-ach[data-wi="'+wi+'"]');
+  if(!items.length) return;
+  var total=0;
+  items.forEach(function(el){total+=parseInt(el.value)||0;});
+  var avg=Math.round(total/items.length);
+  // 원형 그래프 업데이트는 간단히 텍스트만
+  var circles=document.querySelectorAll('[data-wi-avg="'+wi+'"]');
+  circles.forEach(function(el){el.textContent=avg+'%';});
 }
+
+
 function saveItemAchievement(sid,weekKey,ii,val){
   const s=DB.students.find(function(x){return x.id===sid;});
   if(!s||!s.weeklies) return;
