@@ -745,6 +745,34 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
   </div>
 </div>
 
+<!-- 영상/지식 상세 모달 -->
+<div class="modal-overlay" id="modal-resource-detail" onclick="if(event.target===this)closeM('modal-resource-detail')">
+  <div class="modal" style="max-height:85vh;display:flex;flex-direction:column">
+    <div class="modal-head">
+      <div class="modal-title" id="res-detail-title">영상/지식</div>
+      <button class="close-btn" onclick="closeM('modal-resource-detail')">✕</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1" id="res-detail-body"></div>
+    <div class="modal-foot" style="flex-direction:column;gap:8px">
+      <div style="display:flex;gap:8px;width:100%">
+        <select id="res-comment-role" onchange="updateResCommentUI()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit">
+          <option value="student">학생</option>
+          <option value="teacher">선생님</option>
+        </select>
+        <select id="res-comment-author" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit"></select>
+      </div>
+      <div id="res-comment-teacher-row" style="display:none;width:100%">
+        <input type="text" id="res-comment-teacher-name" placeholder="선생님 이름" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;box-sizing:border-box">
+      </div>
+      <div style="display:flex;gap:8px;width:100%">
+        <input type="password" id="res-comment-pw" placeholder="비밀번호" maxlength="20" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit">
+        <textarea id="res-comment-input" placeholder="댓글을 입력하세요" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;resize:none;min-height:40px"></textarea>
+        <button onclick="submitResourceComment()" class="btn btn-pink" style="padding:8px 14px;font-size:12px;flex-shrink:0">등록</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 픽업수업 희망신청 모달 -->
 <div class="modal-overlay" id="modal-pickup-wish" onclick="if(event.target===this)closeM('modal-pickup-wish')">
   <div class="modal">
@@ -962,72 +990,41 @@ function showPage(id){
   if(id==='page-schedule') renderSchedule();
 }
 function renderResourceBoard(){
-  const w=document.getElementById('resource-board-wrap');
+  var w=document.getElementById('resource-board-wrap');
   if(!w) return;
-  const allRes=(DB.resources||[]).slice().reverse();
+  var allRes=(DB.resources||[]).slice().reverse();
   if(!allRes.length){w.innerHTML='';return;}
-  const showAll=window._resShowAll||false;
-  const resources=showAll?allRes:allRes.slice(0,3);
-  let html='<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:6px;padding:0 2px">🎬 영상/지식 공유</div>';
-  resources.forEach(function(r){
+  var showAll=window._resShowAll||false;
+  var display=showAll?allRes:allRes.slice(0,3);
+  var html='<div style="margin-bottom:10px">';
+  html+='<div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:6px;padding:0 2px">🎬 영상/지식 공유</div>';
+  display.forEach(function(r){
     var isYT=r.url&&(r.url.indexOf('youtube.com')>=0||r.url.indexOf('youtu.be')>=0);
     var ytMatch=isYT&&r.url.match(/(?:v=|youtu\.be\/)([^&?]+)/);
     var ytId=ytMatch?ytMatch[1]:'';
-    var thumb=ytId?'<img src="https://img.youtube.com/vi/'+ytId+'/mqdefault.jpg" style="width:80px;height:50px;object-fit:cover;border-radius:8px;flex-shrink:0">':'<div style="width:80px;height:50px;background:var(--light);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">'+(r.url?'🔗':'📝')+'</div>';
-    var onclick=r.url?'onclick="window.open(\'' + r.url.replace(/'/g,"\\'") + '\',\'_blank\')"':'';
-    html+='<div '+onclick+' style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:11px 13px;margin-bottom:7px;cursor:'+(r.url?'pointer':'default')+';display:flex;gap:10px;align-items:center">';
-    html+=thumb;
-    html+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;margin-bottom:2px">'+esc(r.title)+'</div>';
-    if(r.desc) html+='<div style="font-size:11px;color:var(--gray);line-height:1.4">'+esc(r.desc)+'</div>';
-    html+='<div style="font-size:10px;color:var(--gray2);margin-top:3px">'+(r.time||'')+'</div></div>';
-    if(r.url) html+='<div style="color:var(--gray2);font-size:18px;flex-shrink:0">›</div>';
+    var commentCnt=(r.comments||[]).length;
+    html+='<div onclick="openResourceDetail(\'' +r.id+ '\')" style="background:var(--white);border:1px solid var(--border);border-radius:12px;padding:11px 13px;margin-bottom:7px;cursor:pointer;display:flex;gap:10px;align-items:center">';
+    if(ytId){
+      html+='<img src="https://img.youtube.com/vi/'+ytId+'/mqdefault.jpg" style="width:60px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0">';
+    } else if(r.url){
+      html+='<div style="width:40px;height:40px;background:var(--light);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🔗</div>';
+    } else {
+      html+='<div style="width:40px;height:40px;background:var(--light);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📝</div>';
+    }
+    html+='<div style="flex:1;min-width:0">';
+    html+='<div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.title)+'</div>';
+    html+='<div style="font-size:10px;color:var(--gray);margin-top:2px">'+( r.time||'')+(commentCnt?' · 💬 '+commentCnt:'')+'</div>';
+    html+='</div>';
+    html+='<div style="color:var(--gray2);font-size:18px;flex-shrink:0">›</div>';
     html+='</div>';
   });
+  if(allRes.length>3){
+    html+='<div style="text-align:center;margin-top:4px"><button onclick="window._resShowAll=!window._resShowAll;renderResourceBoard()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:5px 16px;font-size:11px;color:var(--gray);cursor:pointer;font-family:inherit">'+(showAll?'▲ 접기':'▼ 더보기 ('+(allRes.length-3)+'개 더)')+'</button></div>';
+  }
   html+='</div>';
   w.innerHTML=html;
 }
-function renderMain(){renderNoticeBar();renderResourceBoard();renderMsgBoard();renderStudentList();updAlertDot();}
-function updAlertDot(){const n=DB.requests.filter(r=>!r.read).length;const d=document.getElementById('main-alert');if(d)d.style.display=n?'inline':'none';}
-window.updAlertDot=updAlertDot;
 
-// ═══════════════════════════════════════════
-// NOTICE
-// ═══════════════════════════════════════════
-function renderNoticeBar(){
-  const w=document.getElementById('notice-bar-wrap');
-  const notices=DB.notices||[];
-  if(!notices.length){w.innerHTML='';return;}
-  const showAll=window._noticeShowAll||false;
-  const display=showAll?notices:notices.slice(0,3);
-  w.innerHTML=`<div style="margin-bottom:10px">
-    <div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:6px;padding:0 2px">📢 공지사항</div>
-    ${display.map((n,i)=>`
-    <div onclick="viewNotice(${i})" style="background:var(--white);border:1px solid var(--border);border-left:3px solid var(--pink);border-radius:10px;padding:10px 13px;margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:10px">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:800;color:var(--pink)">${esc(n.title)}</div>
-        <div style="font-size:11px;color:var(--gray);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((n.content||'').replace(/\n/g,' ').substring(0,40))}${(n.content||'').length>40?'…':''}</div>
-      </div>
-      <div style="color:var(--gray2);font-size:18px;flex-shrink:0">›</div>
-    </div>`).join('')}
-    ${notices.length>3?`<div style="text-align:center;margin-top:4px">
-      <button onclick="window._noticeShowAll=!window._noticeShowAll;renderNoticeBar()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:5px 16px;font-size:11px;color:var(--gray);cursor:pointer;font-family:inherit">
-        ${showAll?'▲ 접기':'▼ 더보기 ('+(notices.length-3)+'개 더)'}
-      </button>
-    </div>`:''}
-  </div>`;
-}
-function viewNotice(idx){
-  const n=(DB.notices||[])[idx];
-  if(!n) return;
-  document.getElementById('notice-view-title').textContent=n.title;
-  document.getElementById('notice-txt').textContent=n.content||'';
-  openM('modal-notice');
-}
-
-// ═══════════════════════════════════════════
-// MESSAGE BOARD
-// ═══════════════════════════════════════════
-const POSTIT_COLORS=['#fef08a','#bbf7d0','#bfdbfe','#fecdd3','#e9d5ff','#fed7aa','#a5f3fc','#fde68a'];
 
 function renderMsgBoard(){
   const w=document.getElementById('message-board-wrap');
@@ -1492,106 +1489,71 @@ function renderMonthlyGoalCard(s){
   var ymLabel=n.getFullYear()+'년 '+(n.getMonth()+1)+'월';
   var goals=s.monthlyGoals||[];
   var cur=goals.find(function(g){return g.month===ym;})||{month:ym,goal:'',achievement:0};
-  var prev=goals.filter(function(g){return g.month!==ym;}).sort(function(a,b){return b.month.localeCompare(a.month);}).slice(0,3);
+  var prev=goals.filter(function(g){return g.month!==ym;}).sort(function(a,b){return b.month.localeCompare(a.month);}).slice(0,5);
   var ach=cur.achievement||0;
   var parts=[];
   parts.push('<div class="card">');
   parts.push('<div class="card-head"><div class="card-title">✨ 이달의 목표</div><span style="font-size:11px;color:var(--gray)">'+ymLabel+'</span></div>');
   parts.push('<div class="card-body">');
   parts.push('<div class="form-row"><label class="form-label">이달 목표</label>');
-  parts.push('<textarea id="goal-monthly-'+s.id+'" placeholder="이달에 이루고 싶은 것을 적어보세요" onblur="saveMonthlyGoalText('+s.id+',this.value)">'+esc(cur.goal)+'</textarea></div>');
-  parts.push('<div class="form-row"><label class="form-label">달성률</label>');
-  parts.push('<div style="display:flex;align-items:center;gap:10px">');
-  parts.push('<input type="range" id="goal-ach-'+s.id+'" data-sid="'+s.id+'" min="0" max="100" value="'+ach+'" style="flex:1" oninput="goalRangeInput(this)" onchange="saveMonthlyAch('+s.id+',this.value)">');
-  parts.push('<span id="goal-pct-'+s.id+'" style="font-size:14px;font-weight:800;color:var(--pink);min-width:40px">'+ach+'%</span></div>');
+  parts.push('<textarea id="goal-monthly-'+s.id+'" placeholder="이달에 이루고 싶은 것을 적어보세요" style="min-height:80px">'+esc(cur.goal)+'</textarea></div>');
+  parts.push('<div class="form-row"><label class="form-label">달성률 <span id="goal-pct-'+s.id+'">'+ach+'%</span></label>');
+  parts.push('<input type="range" id="goal-ach-'+s.id+'" data-sid="'+s.id+'" min="0" max="100" value="'+ach+'" style="width:100%" oninput="goalRangeInput(this)">');
   parts.push('<div style="background:var(--light);border-radius:20px;height:8px;margin-top:6px;overflow:hidden"><div id="goal-bar-'+s.id+'" style="background:var(--pink);height:100%;width:'+ach+'%;border-radius:20px;transition:width .3s"></div></div></div>');
-  parts.push('<div class="form-row" style="margin-bottom:0"><label class="form-label">댄서로서의 목표</label>');
-  parts.push('<textarea placeholder="댄서로서 궁극적인 목표를 적어보세요" onblur="updField('+s.id+',&quot;dancer&quot;,this.value)">'+esc(s.goals&&s.goals.dancer||'')+'</textarea></div>');
+  parts.push('<div class="form-row" style="margin-bottom:8px"><label class="form-label">댄서로서의 목표</label>');
+  parts.push('<textarea id="goal-dancer-'+s.id+'" placeholder="댄서로서 궁극적인 목표를 적어보세요">'+esc(s.goals&&s.goals.dancer||'')+'</textarea></div>');
+  parts.push('<button class="btn btn-pink" onclick="saveMonthlyGoalBtn('+s.id+')" style="width:100%">저장하기</button>');
+  // 지난 목표
   if(prev.length){
-    parts.push('<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px"><div style="font-size:11px;font-weight:800;color:var(--gray);margin-bottom:8px">📅 지난 목표 기록</div>');
+    parts.push('<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px">');
+    parts.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">');
+    parts.push('<div style="font-size:11px;font-weight:800;color:var(--gray)">📅 지난 목표 기록</div>');
+    parts.push('<button onclick="togglePrevGoals('+s.id+')" id="prev-goals-btn-'+s.id+'" style="background:none;border:none;font-size:11px;color:var(--blue);cursor:pointer">펼치기</button>');
+    parts.push('</div>');
+    parts.push('<div id="prev-goals-'+s.id+'" style="display:none">');
     prev.forEach(function(g){
       var ga=g.achievement||0;
       parts.push('<div style="background:var(--light);border-radius:8px;padding:8px 10px;margin-bottom:6px">');
       parts.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:11px;font-weight:700;color:var(--gray)">'+g.month+'</span><span style="font-size:12px;font-weight:800;color:var(--pink)">'+ga+'%</span></div>');
       parts.push('<div style="font-size:12px">'+esc(g.goal)+'</div>');
-      parts.push('<div style="background:var(--border);border-radius:20px;height:5px;margin-top:5px;overflow:hidden"><div style="background:var(--pink);height:100%;width:'+ga+'%;border-radius:20px"></div></div></div>');
+      parts.push('<div style="background:var(--border);border-radius:20px;height:5px;margin-top:5px;overflow:hidden"><div style="background:var(--pink);height:100%;width:'+ga+'%;border-radius:20px"></div></div>');
+      parts.push('</div>');
     });
-    parts.push('</div>');
+    parts.push('</div></div>');
   }
   parts.push('</div></div>');
   return parts.join('');
 }
 
-
-// ── 이달의 목표 달성률 슬라이더 ──
-function goalRangeInput(el){
-  var sid=el.getAttribute('data-sid');
-  var v=el.value;
-  var pct=document.getElementById('goal-pct-'+sid);
-  var bar=document.getElementById('goal-bar-'+sid);
-  if(pct) pct.textContent=v+'%';
-  if(bar) bar.style.width=v+'%';
+function togglePrevGoals(sid){
+  var el=document.getElementById('prev-goals-'+sid);
+  var btn=document.getElementById('prev-goals-btn-'+sid);
+  if(!el) return;
+  var isHidden=el.style.display==='none';
+  el.style.display=isHidden?'block':'none';
+  if(btn) btn.textContent=isHidden?'접기':'펼치기';
 }
 
-// ── 픽업수업 희망신청 ──
-var pickupWishSid=null;
-function openPickupWishModal(sid){
-  pickupWishSid=sid;
+function saveMonthlyGoalBtn(sid){
   var s=DB.students.find(function(x){return x.id===sid;});
   if(!s) return;
+  var goal=(document.getElementById('goal-monthly-'+sid)||{value:''}).value||'';
+  var dancer=(document.getElementById('goal-dancer-'+sid)||{value:''}).value||'';
+  var ach=parseInt((document.getElementById('goal-ach-'+sid)||{value:0}).value)||0;
   var n=new Date();
-  var nextMonth=new Date(n.getFullYear(), n.getMonth()+1, 1);
-  var nextYm=nextMonth.getFullYear()+'-'+String(nextMonth.getMonth()+1).padStart(2,'0');
-  var nextLabel=nextMonth.getFullYear()+'년 '+(nextMonth.getMonth()+1)+'월';
-  var sel=document.getElementById('pickup-wish-select');
-  if(!sel){alert('모달을 찾을 수 없습니다');return;}
-  sel.innerHTML='<option value="">— 수업 선택 —</option>';
-  DB.regularClasses.forEach(function(c){
-    var opt=document.createElement('option');
-    opt.value=c.id;
-    opt.textContent=c.name+(c.teacher?' · '+c.teacher:'')+(c.day?' ('+c.day+')':'');
-    sel.appendChild(opt);
-  });
-  var wishes=s.pickupWishes||[];
-  var existing=wishes.find(function(w){return w.month===nextYm;});
-  if(existing){
-    sel.value=existing.classId||'';
-    document.getElementById('pickup-wish-note').value=existing.note||'';
-    document.getElementById('pickup-wish-current').textContent=nextLabel+' 신청완료';
-  } else {
-    sel.value='';
-    document.getElementById('pickup-wish-note').value='';
-    document.getElementById('pickup-wish-current').textContent=nextLabel+' 신청 내역 없음';
-  }
-  openM('modal-pickup-wish');
-}
-function submitPickupWish(){
-  var s=DB.students.find(function(x){return x.id===pickupWishSid;});
-  if(!s) return;
-  var classId=document.getElementById('pickup-wish-select').value;
-  var note=document.getElementById('pickup-wish-note').value.trim();
-  if(!classId){alert('수업을 선택해주세요');return;}
-  var n=new Date();
-  var nextMonth=new Date(n.getFullYear(), n.getMonth()+1, 1);
-  var nextYm=nextMonth.getFullYear()+'-'+String(nextMonth.getMonth()+1).padStart(2,'0');
-  if(!s.pickupWishes) s.pickupWishes=[];
-  var idx=s.pickupWishes.findIndex(function(w){return w.month===nextYm;});
-  var entry={month:nextYm,classId:classId,note:note};
-  if(idx>=0) s.pickupWishes[idx]=entry;
-  else s.pickupWishes.push(entry);
+  var ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  if(!s.monthlyGoals) s.monthlyGoals=[];
+  var idx=s.monthlyGoals.findIndex(function(g){return g.month===ym;});
+  var entry={month:ym,goal:goal,achievement:ach};
+  if(idx>=0) s.monthlyGoals[idx]=entry;
+  else s.monthlyGoals.push(entry);
+  if(!s.goals) s.goals={};
+  s.goals.monthly=goal;
+  s.goals.dancer=dancer;
   save();saveStudent(s);
-  showToast('✅ 희망신청 완료!');
-  closeM('modal-pickup-wish');
+  showToast('✅ 이달의 목표 저장!');
 }
 
-// ── weeklyToggle ──
-function weeklyToggle(el){
-  var sid=parseInt(el.getAttribute('data-sid'));
-  var wi=parseInt(el.getAttribute('data-wk'));
-  var ii=parseInt(el.getAttribute('data-ii'));
-  var sorted=(DB.students.find(function(x){return x.id===sid;})||{weeklies:[]}).weeklies.sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);});
-  if(sorted[wi]) toggleWeekly(sid,sorted[wi].weekKey,ii);
-}
 
 function saveMonthlyAch(sid, achievement){
   const s=DB.students.find(function(x){return x.id===sid;});
@@ -2607,6 +2569,116 @@ function renderAdmResource(c){
     </div>
   </div>`;
 }
+var curResourceId=null;
+function openResourceDetail(id){
+  curResourceId=id;
+  var r=(DB.resources||[]).find(function(x){return x.id===id;});
+  if(!r) return;
+  document.getElementById('res-detail-title').textContent=esc(r.title);
+  // 댓글 작성자 목록
+  var sel=document.getElementById('res-comment-author');
+  sel.innerHTML='<option value="">— 선택 —</option>';
+  DB.students.forEach(function(s){
+    var opt=document.createElement('option');
+    opt.value=s.id;
+    opt.textContent=s.name;
+    sel.appendChild(opt);
+  });
+  document.getElementById('res-comment-pw').value='';
+  document.getElementById('res-comment-input').value='';
+  document.getElementById('res-comment-role').value='student';
+  updateResCommentUI();
+  renderResourceDetailBody(r);
+  openM('modal-resource-detail');
+}
+function updateResCommentUI(){
+  var isT=document.getElementById('res-comment-role').value==='teacher';
+  document.getElementById('res-comment-author').style.display=isT?'none':'block';
+  document.getElementById('res-comment-teacher-row').style.display=isT?'block':'none';
+}
+function renderResourceDetailBody(r){
+  var isYT=r.url&&(r.url.indexOf('youtube.com')>=0||r.url.indexOf('youtu.be')>=0);
+  var ytMatch=isYT&&r.url.match(/(?:v=|youtu\.be\/)([^&?]+)/);
+  var ytId=ytMatch?ytMatch[1]:'';
+  var parts=[];
+  if(ytId){
+    parts.push('<div style="margin-bottom:12px;border-radius:10px;overflow:hidden;cursor:pointer" onclick="window.open(this.dataset.url,&quot;_blank&quot;)" data-url="'+r.url+'">');
+    parts.push('<img src="https://img.youtube.com/vi/'+ytId+'/mqdefault.jpg" style="width:100%;border-radius:10px">');
+    parts.push('<div style="text-align:center;margin-top:6px;font-size:12px;color:var(--blue)">▶ 유튜브에서 보기</div></div>');
+  } else if(r.url){
+    parts.push('<div style="background:var(--light);border-radius:10px;padding:12px;margin-bottom:12px;cursor:pointer;color:var(--blue);font-size:13px;font-weight:700" onclick="window.open(this.dataset.url,&quot;_blank&quot;)" data-url="'+r.url+'">🔗 링크 열기</div>');
+  }
+  if(r.desc){
+    parts.push('<div style="font-size:13px;line-height:1.7;margin-bottom:14px;white-space:pre-wrap">'+esc(r.desc)+'</div>');
+  }
+  var comments=r.comments||[];
+  parts.push('<div style="font-size:12px;font-weight:800;color:var(--gray);margin-bottom:8px">💬 댓글 '+comments.length+'개</div>');
+  if(!comments.length){
+    parts.push('<div style="text-align:center;padding:14px;font-size:12px;color:var(--gray)">첫 댓글을 달아보세요!</div>');
+  } else {
+    comments.forEach(function(c){
+      parts.push('<div style="background:var(--light);border-radius:8px;padding:8px 10px;margin-bottom:6px">');
+      parts.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">');
+      parts.push('<span style="font-size:12px;font-weight:800;color:'+(c.isTeacher?'var(--pink)':'var(--black)')+'">'+(c.isTeacher?'👑 ':'')+esc(c.author)+'</span>');
+      parts.push('<div style="display:flex;align-items:center;gap:6px">');
+      parts.push('<span style="font-size:10px;color:var(--gray)">'+c.time+'</span>');
+      if(isAdmin){
+        parts.push('<button class="del-res-comment" data-rid="'+r.id+'" data-cid="'+c.id+'" style="background:none;border:none;color:var(--gray2);cursor:pointer;font-size:13px">×</button>');
+      }
+      parts.push('</div></div>');
+      parts.push('<div style="font-size:12px;line-height:1.5">'+esc(c.content)+'</div>');
+      parts.push('</div>');
+    });
+  }
+  document.getElementById('res-detail-body').innerHTML=parts.join('');
+  // 댓글 삭제 버튼 이벤트
+  document.querySelectorAll('.del-res-comment').forEach(function(btn){
+    btn.onclick=function(){
+      delResourceComment(this.getAttribute('data-rid'),this.getAttribute('data-cid'));
+    };
+  });
+}
+
+function submitResourceComment(){
+  var r=(DB.resources||[]).find(function(x){return x.id===curResourceId;});
+  if(!r) return;
+  var role=document.getElementById('res-comment-role').value;
+  var pw=document.getElementById('res-comment-pw').value;
+  var content=document.getElementById('res-comment-input').value.trim();
+  if(!content){alert('댓글 내용을 입력해주세요');return;}
+  var authorName='';var isTeacher=false;
+  if(role==='teacher'){
+    var tname=(document.getElementById('res-comment-teacher-name').value||'').trim();
+    if(!tname){alert('이름을 입력해주세요');return;}
+    if(pw!==DB.adminPw){alert('관리자 비밀번호가 틀렸습니다');return;}
+    authorName=tname;isTeacher=true;
+  } else {
+    var sid=document.getElementById('res-comment-author').value;
+    if(!sid){alert('이름을 선택해주세요');return;}
+    var s=DB.students.find(function(x){return x.id==sid;});
+    if(!s||s.pw!==pw){alert('비밀번호가 틀렸습니다');return;}
+    authorName=s.name;
+  }
+  if(!r.comments) r.comments=[];
+  var now=new Date();
+  var time=(now.getMonth()+1)+'/'+now.getDate()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  r.comments.push({id:'rc'+Date.now(),author:authorName,isTeacher:isTeacher,content:content,time:time});
+  if(window.fb) window.fb.saveResource(r);
+  document.getElementById('res-comment-input').value='';
+  document.getElementById('res-comment-pw').value='';
+  renderResourceDetailBody(r);
+  renderResourceBoard();
+  showToast('✅ 댓글 등록!');
+}
+function delResourceComment(resId,comId){
+  var r=(DB.resources||[]).find(function(x){return x.id===resId;});
+  if(!r) return;
+  r.comments=(r.comments||[]).filter(function(c){return c.id!==comId;});
+  if(window.fb) window.fb.saveResource(r);
+  renderResourceDetailBody(r);
+  renderResourceBoard();
+}
+
 function addResource(){
   const title=document.getElementById('res-title').value.trim();
   const url=document.getElementById('res-url').value.trim();
