@@ -1988,7 +1988,7 @@ function renderWeeklyList(s){
   var sorted=[...weeks].sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);}).slice(0,10);
   var html='';
   sorted.forEach(function(w,wi){
-    var isThisWeek=wi===0;
+    var thisWk=getWeekKey(0);var isThisWeek=w.weekKey===thisWk;
     var total=w.items.length;
     var avgPct=total?Math.round(w.items.reduce(function(sum,i){return sum+(i.achievement||0);},0)/total):0;
     var avgColor=pctColor(avgPct);
@@ -2130,7 +2130,7 @@ function saveWeekly(){
   const idx=s.weeklies.findIndex(w=>w.weekKey===wk);
   if(idx>=0) s.weeklies[idx]={weekKey:wk,weekLabel:wl,items};
   else s.weeklies.push({weekKey:wk,weekLabel:wl,items});
-  save('student',curSid);closeM('modal-weekly');
+  save();saveStudent(s);closeM('modal-weekly');
   const el=document.getElementById('weekly-list-'+curSid);
   if(el) el.innerHTML=renderWeeklyList(s);
 }
@@ -2641,17 +2641,98 @@ function renderAdmContent(){
 
 // ── Students
 function renderAdmStudents(c){
-  c.innerHTML=`<div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn btn-pink" onclick="openM('modal-add-s')" style="flex:1">+ 학생 추가</button><button onclick="openBroadcastModal()" style="background:#7c3aed;color:white;border:none;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap">📢 전체메시지</button></div>
-  <div class="adm-section">${!DB.students.length?'<div class="empty-msg">등록된 학생이 없습니다</div>':DB.students.map(s=>`
-    <div class="adm-row">
-      <div class="avatar" style="width:34px;height:34px;font-size:14px">${s.photo?`<img src="${s.photo}">`:`${s.name[0]}`}</div>
-      <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px">${esc(s.name)}</div><div class="text-sm text-gray">${s.major||'전공없음'} · ${s.birth}</div></div>
-      <button onclick="openTeacherMsg(${s.id})" style="background:var(--pink-bg);border:1px solid #fbb6d8;color:var(--pink);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;margin-right:3px">💌</button>
-      <button class="edt-btn" onclick="openPwM(${s.id})" style="margin-right:3px">🔑 PW</button>
-      <button class="del-btn" onclick="delStudent(${s.id})">삭제</button>
-    </div>`).join('')}
-  </div>`;
+  var sorted=[...DB.students].sort(function(a,b){return a.name.localeCompare(b.name,'ko');});
+  var now=new Date();
+  var ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+
+  var html='<div style="display:flex;gap:8px;margin-bottom:10px">';
+  html+='<button class="btn btn-pink" onclick="openM(\'modal-add-s\')" style="flex:1">+ 학생 추가</button>';
+  html+='<button onclick="openBroadcastModal()" style="background:#7c3aed;color:white;border:none;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap">📢 전체메시지</button>';
+  html+='</div>';
+  html+='<div class="adm-section">';
+
+  sorted.forEach(function(s){
+    var curPickup=(s.pickupHistory||[]).find(function(h){return h.month===ym;});
+    var pickupCls=curPickup&&curPickup.classId?DB.regularClasses.find(function(x){return x.id===curPickup.classId;}):null;
+    var slots=DB.regularClasses||[];
+    var slotKeys=['r0','r1','r2','r3','r4','r5','r6','r7'];
+    var hasClasses=slotKeys.some(function(k){return s.classes&&s.classes[k];});
+
+    html+='<div style="border-bottom:1px solid var(--border)">';
+    // 학생 헤더 행
+    html+='<div style="display:flex;align-items:center;padding:10px 13px;gap:10px">';
+    // 아바타
+    if(s.photo){
+      html+='<img src="'+s.photo+'" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">';
+    } else {
+      var initial=s.name?s.name[0]:'?';
+      html+='<div style="width:36px;height:36px;border-radius:50%;background:var(--pink-bg);border:1.5px solid var(--pink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--pink);flex-shrink:0">'+initial+'</div>';
+    }
+    // 이름/정보
+    html+='<div style="flex:1;min-width:0" onclick="admViewStudent('+s.id+')" style="cursor:pointer">';
+    html+='<div style="font-weight:800;font-size:14px;cursor:pointer" onclick="admViewStudent('+s.id+')">'+esc(s.name)+'</div>';
+    html+='<div style="font-size:11px;color:var(--gray)">'+esc(s.major||'전공없음')+' · '+esc(s.birth||'')+'</div>';
+    if(pickupCls) html+='<div style="font-size:11px;color:var(--blue);margin-top:1px">🎯 픽업: '+esc(pickupCls.name)+'</div>';
+    html+='</div>';
+    // 버튼들
+    html+='<div style="display:flex;gap:4px;align-items:center">';
+    html+='<button onclick="admViewStudent('+s.id+')" style="background:var(--pink-bg);border:1px solid #fbb6d8;color:var(--pink);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">개인</button>';
+    html+='<button onclick="openTeacherMsg('+s.id+')" style="background:#f3e8ff;border:1px solid #d8b4fe;color:#7c3aed;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">💌</button>';
+    html+='<button onclick="openPickupM('+s.id+')" style="background:#e0f2fe;border:1px solid #7dd3fc;color:#0369a1;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">픽업</button>';
+    html+='<button onclick="openPwM('+s.id+')" style="background:var(--light);border:1px solid var(--border);color:var(--gray);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">🔑</button>';
+    html+='<button class="del-btn" onclick="delStudent('+s.id+')">삭제</button>';
+    html+='</div></div>';
+
+    // 수업 토글
+    if(hasClasses){
+      html+='<div id="adm-cls-'+s.id+'" style="display:none;padding:0 13px 10px;background:#fafafa">';
+      slotKeys.forEach(function(k){
+        var cls=s.classes&&s.classes[k]?DB.regularClasses.find(function(x){return x.id===s.classes[k];}):null;
+        if(cls){
+          html+='<div style="display:inline-block;background:white;border:1px solid var(--border);border-radius:6px;padding:3px 8px;margin:2px;font-size:11px">';
+          html+=esc(cls.name)+(cls.teacher?' · '+esc(cls.teacher):'');
+          html+='</div>';
+        }
+      });
+      html+='</div>';
+      // 수업 펼치기 버튼
+      var nameDiv=html.lastIndexOf('onclick="admViewStudent('+s.id+')">'+esc(s.name)+'</div>');
+    }
+    html+='</div>';
+  });
+
+  html+='</div>';
+  c.innerHTML=html;
 }
+
+function admViewStudent(sid){
+  // 관리자 모드에서 개인 페이지 열기
+  curSid=sid;
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  document.getElementById('profile-name').textContent=s.name;
+  document.getElementById('profile-sub').textContent='개인 페이지';
+  renderProfile(s);
+  showPage('page-profile');
+  // 개인 페이지에 관리자 퀵 버튼 표시
+  setTimeout(function(){showAdmQuickBar(sid);},100);
+}
+
+function showAdmQuickBar(sid){
+  if(!isAdmin) return;
+  var existing=document.getElementById('adm-quick-bar');
+  if(existing) existing.remove();
+  var bar=document.createElement('div');
+  bar.id='adm-quick-bar';
+  bar.style.cssText='position:fixed;bottom:70px;left:0;right:0;background:#7c3aed;padding:8px 16px;display:flex;gap:8px;z-index:900;justify-content:center';
+  bar.innerHTML='<span style="color:white;font-size:12px;font-weight:800;align-self:center">관리자:</span>'
+    +'<button onclick="openTeacherMsg('+sid+')" style="background:white;color:#7c3aed;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer">💌 메시지</button>'
+    +'<button onclick="openPickupM('+sid+')" style="background:white;color:#0369a1;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer">🎯 픽업지정</button>'
+    +'<button onclick="editStudent('+sid+')" style="background:white;color:var(--gray);border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer">✏️ 수정</button>';
+  document.body.appendChild(bar);
+}
+
+
 function addStudent(){
   const name=document.getElementById('ns-name').value.trim(),birth=document.getElementById('ns-birth').value,major=document.getElementById('ns-major').value.trim(),pw=document.getElementById('ns-pw').value;
   if(!name||!birth||!pw){alert('이름, 생년월일, 비밀번호는 필수입니다');return}
