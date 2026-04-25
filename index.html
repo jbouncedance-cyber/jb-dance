@@ -2716,14 +2716,17 @@ function renderAdmStudents(c){
       var pkCls=DB.regularClasses.find(function(x){return x.id===curPickupId;});
       if(pkCls) myClasses.push({label:'픽업',cls:pkCls,type:'pickup'});
     }
-    // 트레이닝 수업
-    var myTraining=(s.trainingSlots||{});
-    (DB.trainingSlots||[]).forEach(function(slot){
-      (slot.options||[]).forEach(function(opt){
-        if(myTraining[slot.key]===opt.id){
-          myClasses.push({label:'트레이닝',cls:{name:opt.name,teacher:opt.teacher||'',day:slot.day||''},type:'training'});
+    // 트레이닝 수업 (s.classes[ts.slotKey]에 저장됨)
+    (DB.trainingSlots||[]).forEach(function(ts){
+      var selId=s.classes&&s.classes[ts.slotKey];
+      if(selId){
+        var opt=(ts.options||[]).find(function(o){return o.id===selId;});
+        if(opt){
+          var day=opt.day||(ts.day||'');
+          var time=opt.timeStart?(day+' '+opt.timeStart+(opt.timeEnd?'~'+opt.timeEnd:'')):(day||'');
+          myClasses.push({label:'트레이닝',cls:{name:opt.name,teacher:opt.teacher||'',day:time},type:'training'});
         }
-      });
+      }
     });
 
     html+='<div style="border-bottom:1px solid var(--border)">';
@@ -2800,10 +2803,12 @@ function showAdmQuickBar(sid){
   var bar=document.createElement('div');
   bar.id='adm-quick-bar';
   bar.style.cssText='position:fixed;bottom:70px;left:0;right:0;background:#7c3aed;padding:10px 16px;display:flex;gap:8px;z-index:900;justify-content:center;box-shadow:0 -2px 12px rgba(0,0,0,.15)';
+  bar.dataset.sid=String(sid);
   bar.innerHTML='<span style="color:rgba(255,255,255,.8);font-size:11px;font-weight:700;align-self:center;flex-shrink:0">관리자</span>'
-    +'<button onclick="openTeacherMsg('+sid+')" style="background:white;color:#7c3aed;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;flex:1;max-width:120px">💌 메시지</button>'
-    +'<button onclick="openPickupM('+sid+')" style="background:white;color:#0369a1;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;flex:1;max-width:120px">🎯 픽업지정</button>';
-  document.body.appendChild(bar);
+    +'<button id="qb-msg-btn" style="background:white;color:#7c3aed;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;flex:1;max-width:120px">💌 메시지</button>'
+    +'<button id="qb-pickup-btn" style="background:white;color:#0369a1;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;flex:1;max-width:120px">🎯 픽업지정</button>';
+  document.getElementById('qb-msg-btn').onclick=function(){openTeacherMsg(sid);};
+  document.getElementById('qb-pickup-btn').onclick=function(){openPickupModal(sid);};
 }
 
 
