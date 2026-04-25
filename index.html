@@ -294,6 +294,22 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       if (!sSnap.empty) {
         window.DB.students = [];
         sSnap.forEach(d => window.DB.students.push(d.data()));
+        // 인바디 중복 제거 & Firebase 업데이트
+        window.DB.students.forEach(function(st){
+          if(st.inbody && st.inbody.length>1){
+            var seen={};
+            var before=st.inbody.length;
+            st.inbody=st.inbody.filter(function(ib){
+              if(seen[ib.date]) return false;
+              seen[ib.date]=true; return true;
+            });
+            if(st.inbody.length<before){
+              // 중복 있었으면 Firebase에 정리된 데이터 저장
+              setDoc(doc(STUDENTS_COL, String(st.id)), st).catch(function(){});
+              console.log('인바디 중복 제거:', st.name);
+            }
+          }
+        });
         window.DB.students.sort((a,b) => a.name.localeCompare(b.name,'ko'));
       } else {
         for (const s of window.DB.students) await saveStudent(s);
@@ -430,10 +446,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   // 학생 개별 로드
   async function getStudent(sid){
     try{
-      const {getDoc,doc:getDocFn}=await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js');
-      const snap=await getDoc(getDocFn(STUDENTS_COL, String(sid)));
+      const snap=await getDoc(doc(STUDENTS_COL, String(sid)));
       return snap.exists()?snap.data():null;
-    }catch(e){return null;}
+    }catch(e){console.warn('getStudent err:',e);return null;}
   }
   window.fb_getStudent=getStudent;
   window.fb_loadAll = loadAll;
@@ -2826,23 +2841,27 @@ async function admViewStudent(sid){
   if(!s) return;
   var hd=document.getElementById('profile-hd');
   if(hd) hd.textContent=s.name;
-  // Firebase에서 최신 학생 데이터 로드
-  if(window.fb_getStudent){
-    try{
-      var fresh=await window.fb_getStudent(sid);
-      if(fresh){
-        var idx2=DB.students.findIndex(function(x){return x.id===sid;});
-        if(idx2>=0) DB.students[idx2]=fresh;
-        s=fresh;
-      }
-    }catch(e){}
-  }
-  renderProfile(s);
   showPage('page-profile');
+  renderProfile(s);
   setTimeout(function(){
     showAdmQuickBar(sid);
     bindTeacherMsgBtns();
   },100);
+  // 백그라운드에서 최신 데이터 로드 후 갱신
+  if(window.fb_getStudent){
+    window.fb_getStudent(sid).then(function(fresh){
+      if(!fresh) return;
+      var idx2=DB.students.findIndex(function(x){return x.id===sid;});
+      if(idx2>=0) DB.students[idx2]=fresh;
+      if(curSid===sid){
+        renderProfile(fresh);
+        setTimeout(function(){
+          showAdmQuickBar(sid);
+          bindTeacherMsgBtns();
+        },50);
+      }
+    }).catch(function(e){console.warn('fresh load err:',e);});
+  }
 }
 
 function showAdmQuickBar(sid){
