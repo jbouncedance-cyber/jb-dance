@@ -427,6 +427,15 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     } catch(e) {}
   }
 
+  // 학생 개별 로드
+  async function getStudent(sid){
+    try{
+      const {getDoc,doc:getDocFn}=await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js');
+      const snap=await getDoc(getDocFn(STUDENTS_COL, String(sid)));
+      return snap.exists()?snap.data():null;
+    }catch(e){return null;}
+  }
+  window.fb_getStudent=getStudent;
   window.fb_loadAll = loadAll;
   window.fb = { saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest, saveResource, deleteResource, uploadPhoto, deletePhoto };
 
@@ -2292,10 +2301,10 @@ function renderIbTable(s){
   const diff=(a,b)=>{if(!b) return '';const d=(a-b).toFixed(1);return d>0?`<span style="color:var(--red);font-size:10px">▲${d}</span>`:`<span style="color:var(--green);font-size:10px">▼${Math.abs(d)}</span>`;};
   const scoreDiff=(a,b)=>{if(!b) return '';const d=a-b;return d>0?`<span style="color:var(--green);font-size:10px">▲${d}</span>`:`<span style="color:var(--red);font-size:10px">▼${Math.abs(d)}</span>`;};
 
-  // 미니 차트 (최근 6개)
+  // 미니 차트 (최근 6개) - 점수 기반
   const chartData=sorted.slice(-6);
-  const maxW=Math.max(...chartData.map(r=>r.weight||0));
-  const minW=Math.min(...chartData.map(r=>r.weight||0));
+  const maxW=Math.max(...chartData.map(r=>r.score||0));
+  const minW=Math.min(...chartData.map(r=>r.score||0));
   const range=maxW-minW||1;
 
   let html='';
@@ -2327,11 +2336,11 @@ function renderIbTable(s){
     const w=280,h=50,pad=8;
     const pts=chartData.map((r,i)=>{
       const x=pad+i*(w-2*pad)/(chartData.length-1);
-      const y=h-pad-(r.weight-minW)/range*(h-2*pad);
+      const y=h-pad-(r.score-minW)/range*(h-2*pad);
       return `${x},${y}`;
     }).join(' ');
     html+=`<div style="padding:10px 12px;border-bottom:1px solid var(--border)">
-      <div style="font-size:10px;color:var(--gray);margin-bottom:4px;font-weight:700">📈 체중 변화</div>
+      <div style="font-size:10px;color:var(--gray);margin-bottom:4px;font-weight:700">📈 인바디 점수 변화</div>
       <svg width="100%" viewBox="0 0 ${w} ${h}" style="overflow:visible">
         <polyline points="${pts}" fill="none" stroke="var(--pink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         ${chartData.map((r,i)=>{
@@ -2811,12 +2820,23 @@ function toggleAdmCls(sid){
 }
 
 
-function admViewStudent(sid){
+async function admViewStudent(sid){
   curSid=sid;
   var s=DB.students.find(function(x){return x.id===sid;});
   if(!s) return;
   var hd=document.getElementById('profile-hd');
   if(hd) hd.textContent=s.name;
+  // Firebase에서 최신 학생 데이터 로드
+  if(window.fb_getStudent){
+    try{
+      var fresh=await window.fb_getStudent(sid);
+      if(fresh){
+        var idx2=DB.students.findIndex(function(x){return x.id===sid;});
+        if(idx2>=0) DB.students[idx2]=fresh;
+        s=fresh;
+      }
+    }catch(e){}
+  }
   renderProfile(s);
   showPage('page-profile');
   setTimeout(function(){
@@ -3500,17 +3520,24 @@ function openTeacherMsg(sid){
   document.getElementById('teacher-msg-student-name').textContent='👤 '+s.name+'에게';
   document.getElementById('teacher-msg-input').value='';
   var msgs=(s.teacherMessages||[]).slice().reverse();
-  var parts=[];
-  if(!msgs.length){parts.push('<div style="text-align:center;padding:12px;font-size:13px;color:var(--gray)">아직 메시지가 없어요</div>');}
-  msgs.forEach(function(m){
-    var delFn='delTeacherMsg('+sid+','+JSON.stringify(m.id)+')';
-    parts.push('<div style="background:var(--light);border-radius:8px;padding:8px 10px;margin-bottom:6px">');
-    parts.push('<div style="font-size:10px;color:var(--gray);margin-bottom:4px">'+m.date+(m.read?' · ✓ 읽음':'')+'</div>');
-    parts.push('<div style="font-size:12px;line-height:1.5">'+esc(m.content)+'</div>');
-    parts.push('<button onclick="'+delFn+'" style="margin-top:4px;background:none;border:none;color:var(--gray2);cursor:pointer;font-size:11px">삭제</button>');
-    parts.push('</div>');
-  });
-  document.getElementById('teacher-msg-history').innerHTML=parts.join('');
+  var container=document.getElementById('teacher-msg-history');
+  container.innerHTML='';
+  if(!msgs.length){
+    container.innerHTML='<div style="text-align:center;padding:12px;font-size:13px;color:var(--gray)">아직 메시지가 없어요</div>';
+  } else {
+    msgs.forEach(function(m){
+      var item=document.createElement('div');
+      item.style.cssText='background:var(--light);border-radius:8px;padding:8px 10px;margin-bottom:6px';
+      item.innerHTML='<div style="font-size:10px;color:var(--gray);margin-bottom:4px">'+m.date+(m.read?' · ✓ 읽음':'')+'</div>'
+        +'<div style="font-size:12px;line-height:1.5">'+esc(m.content)+'</div>';
+      var delBtn=document.createElement('button');
+      delBtn.textContent='삭제';
+      delBtn.style.cssText='margin-top:4px;background:none;border:none;color:var(--gray2);cursor:pointer;font-size:11px';
+      delBtn.onclick=(function(mid){ return function(){ delTeacherMsg(sid,mid); }; })(m.id);
+      item.appendChild(delBtn);
+      container.appendChild(item);
+    });
+  }
   openM('modal-teacher-msg');
 }
 
@@ -3524,7 +3551,7 @@ if('serviceWorker' in navigator){
   });
 }
 // 버전 체크 - 업데이트시 자동 새로고침
-var BUILD_VER = '202604250600';
+var BUILD_VER = '202604250612';
 var savedVer = localStorage.getItem('jbd_ver');
 if(savedVer && savedVer !== BUILD_VER){
   localStorage.setItem('jbd_ver', BUILD_VER);
