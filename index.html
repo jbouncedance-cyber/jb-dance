@@ -1655,9 +1655,13 @@ const DAYS=['월','화','수','목','금','토','일'];
 function getStudentClasses(s){
   const reg=[];
   REG_SLOTS.forEach(slot=>{
+    if(slot.key==='r7') return; // 대체수업은 카운트 제외
     const id=s.classes?.[slot.key];
     if(id){const c=DB.regularClasses.find(x=>x.id===id);if(c) reg.push({label:slot.label,name:c.name,teacher:c.teacher,day:c.day||'',timeStart:c.timeStart||'',timeEnd:c.timeEnd||'',type:'reg'});}
   });
+  // 대체수업(r7)은 별도로 표시용으로만 추가
+  const substId=s.classes?.['r7'];
+  const substCls=substId?DB.regularClasses.find(x=>x.id===substId):null;
   const train=[];
   DB.trainingSlots.forEach(ts=>{
     const id=s.classes?.[ts.slotKey];
@@ -2782,7 +2786,7 @@ function renderAdmStudents(c){
     slotKeys.forEach(function(k){
       if(s.classes&&s.classes[k]){
         var cls=DB.regularClasses.find(function(x){return x.id===s.classes[k];});
-        if(cls) myClasses.push({label:slotLabels[k],cls:cls,type:'regular'});
+        if(cls) myClasses.push({label:slotLabels[k],cls:cls,type:k==='r7'?'subst':'regular'});
       }
     });
     // 픽업수업
@@ -2816,12 +2820,13 @@ function renderAdmStudents(c){
     html+='<div style="flex:1;min-width:0;cursor:pointer" onclick="admViewStudent('+s.id+')">';
     html+='<div style="font-weight:800;font-size:14px">'+esc(s.name)+'</div>';
     html+='<div style="font-size:11px;color:var(--gray)">'+esc(s.major||'전공없음')+' · '+esc(s.birth||'')+'</div>';
-    if(pickupCls) html+='<div style="font-size:11px;color:var(--blue);margin-top:1px">🎯 픽업: '+esc(pickupCls.name)+'</div>';
+    if(pickupCls) html+='<div style="font-size:11px;color:var(--blue);margin-top:1px">🎯 픽업: '+esc(pickupCls.name)+(pickupCls.teacher?' · '+esc(pickupCls.teacher):'')+'</div>';
     html+='</div>';
     // 버튼
     html+='<div style="display:flex;gap:4px;align-items:center">';
     if(myClasses.length){
-      html+='<button onclick="toggleAdmCls('+s.id+')" style="background:var(--light);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">수업 '+myClasses.length+'개 ▾</button>';
+      var realCount=myClasses.filter(function(x){return x.type!=='subst';}).length;
+      html+='<button onclick="toggleAdmCls('+s.id+')" style="background:var(--light);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">수업 '+realCount+'개 ▾</button>';
     }
     html+='<button onclick="admViewStudent('+s.id+')" style="background:var(--pink-bg);border:1px solid #fbb6d8;color:var(--pink);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">개인</button>';
     html+='<button onclick="openTeacherMsg('+s.id+')" style="background:#f3e8ff;border:1px solid #d8b4fe;color:#7c3aed;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">💌</button>';
