@@ -2842,25 +2842,26 @@ async function admViewStudent(sid){
   var hd=document.getElementById('profile-hd');
   if(hd) hd.textContent=s.name;
   showPage('page-profile');
-  renderProfile(s);
-  setTimeout(function(){
-    showAdmQuickBar(sid);
-    bindTeacherMsgBtns();
-  },100);
-  // 백그라운드에서 최신 데이터 로드 후 갱신
+  // 로딩 표시
+  var pc=document.getElementById('profile-content');
+  if(pc) pc.innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--gray)"><div style="font-size:30px;margin-bottom:12px">⏳</div><div>최신 데이터 불러오는 중...</div></div>';
+  showAdmQuickBar(sid);
+  // Firebase에서 최신 데이터 먼저 로드
+  var fresh=null;
   if(window.fb_getStudent){
-    window.fb_getStudent(sid).then(function(fresh){
-      if(!fresh) return;
-      var idx2=DB.students.findIndex(function(x){return x.id===sid;});
-      if(idx2>=0) DB.students[idx2]=fresh;
-      if(curSid===sid){
-        renderProfile(fresh);
-        setTimeout(function(){
-          showAdmQuickBar(sid);
-          bindTeacherMsgBtns();
-        },50);
-      }
-    }).catch(function(e){console.warn('fresh load err:',e);});
+    try{ fresh=await window.fb_getStudent(sid); }catch(e){ console.warn('getStudent err:',e); }
+  }
+  if(fresh){
+    var idx2=DB.students.findIndex(function(x){return x.id===sid;});
+    if(idx2>=0) DB.students[idx2]=fresh;
+    s=fresh;
+  }
+  if(curSid===sid){
+    renderProfile(s);
+    setTimeout(function(){
+      showAdmQuickBar(sid);
+      bindTeacherMsgBtns();
+    },80);
   }
 }
 
