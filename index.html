@@ -1988,23 +1988,34 @@ function renderWeeklyList(s){
   var sorted=[...weeks].sort(function(a,b){return b.weekKey.localeCompare(a.weekKey);}).slice(0,10);
   var html='';
   sorted.forEach(function(w,wi){
-    var thisWk=getWeekKey(0);var isThisWeek=w.weekKey===thisWk;
+    var thisWk=getWeekKey(0);
+    var isThisWeek=w.weekKey===thisWk;
     var total=w.items.length;
     var avgPct=total?Math.round(w.items.reduce(function(sum,i){return sum+(i.achievement||0);},0)/total):0;
     var avgColor=pctColor(avgPct);
-    // 헤더 (클릭하면 펼치기/접기)
+
     html+='<div style="border-bottom:1px solid var(--border)">';
-    html+='<div onclick="toggleWeekSection(this)" style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:'+(isThisWeek?'default':'pointer')+'">';
-    html+='<div><div style="font-size:12px;font-weight:800;color:'+(isThisWeek?'var(--pink)':'var(--gray)')+'">'+( isThisWeek?'📍 이번 주':'📁 지난 주')+' · '+w.weekLabel+'</div>';
-    html+='<div data-avg-label="'+wi+'" style="font-size:11px;color:'+avgColor+';margin-top:1px;font-weight:700">평균 '+avgPct+'% 달성</div></div>';
-    html+='<div style="display:flex;align-items:center;gap:8px">';
+    // 헤더
+    html+='<div onclick="'+( !isThisWeek?'toggleWeekSection(this)':'')+'" style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:'+(isThisWeek?'default':'pointer')+'">';
+    html+='<div style="flex:1">';
+    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">';
+    html+='<div style="font-size:12px;font-weight:800;color:'+(isThisWeek?'var(--pink)':'var(--gray)')+'">'+( isThisWeek?'📍 이번 주':'📁 지난 주')+' · '+w.weekLabel+'</div>';
+    if(!isThisWeek){
+      html+='<button class="wk-del-btn" data-sid="'+s.id+'" data-wk="'+w.weekKey+'" style="background:none;border:1px solid #fca5a5;color:#ef4444;border-radius:6px;padding:1px 7px;font-size:10px;cursor:pointer;font-family:inherit">삭제</button>';
+    }
+    html+='</div>';
+    html+='<div style="font-size:11px;color:'+avgColor+';margin-top:1px;font-weight:700" data-avg-label="'+wi+'">평균 '+avgPct+'% 달성</div>';
+    html+='</div>';
+    // 원형 그래프
+    html+='<div style="display:flex;align-items:center;gap:6px">';
     html+='<div style="width:34px;height:34px;position:relative"><svg viewBox="0 0 36 36" style="transform:rotate(-90deg);width:34px;height:34px">';
     html+='<circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" stroke-width="3"/>';
-    html+='<circle cx="18" cy="18" r="15" fill="none" stroke="'+avgColor+'" stroke-width="3" stroke-dasharray="'+Math.round(avgPct*0.942)+' 94.2" stroke-linecap="round" data-avg-wi="'+wi+'" />';
+    html+='<circle cx="18" cy="18" r="15" fill="none" stroke="'+avgColor+'" stroke-width="3" stroke-dasharray="'+Math.round(avgPct*0.942)+' 94.2" stroke-linecap="round" data-avg-wi="'+wi+'"/>';
     html+='</svg><div data-avg-txt="'+wi+'" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:var(--black)">'+avgPct+'%</div></div>';
-    if(!isThisWeek) html+='<span style="font-size:16px;color:var(--gray)">›</span>';
+    if(!isThisWeek) html+='<span style="font-size:14px;color:var(--gray)">›</span>';
     html+='</div></div>';
-    // 항목들 (이번주는 항상 펼침, 지난주는 접힘)
+
+    // 항목들
     html+='<div class="week-items" style="display:'+(isThisWeek?'block':'none')+';padding:0 14px 10px">';
     w.items.forEach(function(item,ii){
       var ach=item.achievement||0;
@@ -2014,22 +2025,21 @@ function renderWeeklyList(s){
       html+='<div style="font-size:13px;font-weight:600">'+esc(item.text)+'</div>';
       html+='<span id="wpct-'+wi+'-'+ii+'" style="font-size:12px;font-weight:800;color:'+color+';min-width:36px;text-align:right">'+ach+'%</span>';
       html+='</div>';
-      // 슬라이더 한 줄 (배경이 게이지 역할)
       if(isThisWeek){
-        // 이달의 목표와 동일한 방식 - 배경+컬러바+슬라이더 레이어
-        html+='<div style="position:relative;height:22px;display:flex;align-items:center;margin-top:2px">';
+        html+='<div style="position:relative;height:22px;display:flex;align-items:center">';
         html+='<div style="position:absolute;width:100%;height:10px;background:var(--light);border-radius:5px;top:50%;transform:translateY(-50%)"></div>';
         html+='<div id="wbar-'+wi+'-'+ii+'" style="position:absolute;height:10px;background:'+color+';border-radius:5px;top:50%;transform:translateY(-50%);width:'+ach+'%;transition:width .1s,background .2s;pointer-events:none"></div>';
         html+='<input type="range" min="0" max="100" value="'+ach+'" class="wk-ach" data-sid="'+s.id+'" data-wi="'+wi+'" data-ii="'+ii+'" style="position:absolute;width:100%;opacity:0;cursor:pointer;z-index:2;height:22px;margin:0">';
         html+='</div>';
       } else {
-        html+='<div style="background:var(--light);border-radius:4px;height:8px;overflow:hidden">';
-        html+='<div style="background:'+color+';height:100%;width:'+ach+'%;border-radius:4px"></div></div>';
+        html+='<div style="background:var(--light);border-radius:5px;height:10px;overflow:hidden">';
+        html+='<div style="background:'+color+';height:100%;width:'+ach+'%;border-radius:5px"></div></div>';
       }
       html+='</div>';
     });
     html+='</div></div>';
   });
+
   setTimeout(function(){
     document.querySelectorAll('.wk-ach').forEach(function(el){
       el.oninput=function(){
@@ -2041,16 +2051,15 @@ function renderWeeklyList(s){
         var bar=document.getElementById('wbar-'+wi+'-'+ii);
         if(sp){sp.textContent=v+'%';sp.style.color=color;}
         if(bar){bar.style.width=v+'%';bar.style.background=color;}
-        // 원형 그래프 평균 업데이트
+        // 평균 업데이트
         var items=document.querySelectorAll('.wk-ach[data-wi="'+wi+'"]');
         var total=0; items.forEach(function(el2){total+=parseInt(el2.value)||0;});
         var avg=Math.round(total/items.length);
         var avgColor=pctColor(avg);
-        // SVG 원형 업데이트
         var circles=document.querySelectorAll('[data-avg-wi="'+wi+'"]');
         circles.forEach(function(c){c.setAttribute('stroke',avgColor);c.setAttribute('stroke-dasharray',Math.round(avg*0.942)+' 94.2');});
         var avgTxt=document.querySelector('[data-avg-txt="'+wi+'"]');
-        if(avgTxt){avgTxt.textContent=avg+'%';}
+        if(avgTxt) avgTxt.textContent=avg+'%';
         var avgLabel=document.querySelector('[data-avg-label="'+wi+'"]');
         if(avgLabel){avgLabel.textContent='평균 '+avg+'% 달성';avgLabel.style.color=avgColor;}
       };
@@ -2062,26 +2071,42 @@ function renderWeeklyList(s){
         if(sorted2[wi]) saveItemAchievement(sid,sorted2[wi].weekKey,ii,this.value);
       };
     });
+    // 삭제 버튼
+    document.querySelectorAll('.wk-del-btn').forEach(function(btn){
+      btn.onclick=function(e){
+        e.stopPropagation();
+        var sid=parseInt(this.getAttribute('data-sid'));
+        var wk=this.getAttribute('data-wk');
+        delWeeklyRecord(sid,wk);
+      };
+    });
+    // 지난주 토글
     document.querySelectorAll('.week-items').forEach(function(el,i){
       if(i>0){
         var header=el.previousElementSibling;
-        if(header) header.onclick=function(){
-          var isOpen=el.style.display!=='none';
-          el.style.display=isOpen?'none':'block';
-          var arrow=this.querySelector('span:last-child');
-          if(arrow) arrow.textContent=isOpen?'›':'∨';
-        };
+        if(header){
+          header.addEventListener('click',function(){
+            var isOpen=el.style.display!=='none';
+            el.style.display=isOpen?'none':'block';
+          });
+        }
       }
     });
   },50);
   return html;
 }
 
-function toggleWeekSection(el){
-  // 이번주는 토글 없음
+
+function delWeeklyRecord(sid, weekKey){
+  if(!confirm('이 주 기록을 삭제하시겠습니까?')) return;
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  s.weeklies=(s.weeklies||[]).filter(function(w){return w.weekKey!==weekKey;});
+  save();saveStudent(s);
+  var el=document.getElementById('weekly-list-'+sid);
+  if(el) el.innerHTML=renderWeeklyList(s);
+  showToast('✅ 삭제됐어요');
 }
-
-
 function updateWeeklyAvg(wi){
   // 해당 주의 모든 항목 퍼센트 평균 계산해서 원형 그래프 업데이트
   var items=document.querySelectorAll('.wk-ach[data-wi="'+wi+'"]');
@@ -2644,59 +2669,63 @@ function renderAdmStudents(c){
   var sorted=[...DB.students].sort(function(a,b){return a.name.localeCompare(b.name,'ko');});
   var now=new Date();
   var ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  var slotKeys=['r0','r1','r2','r3','r4','r5','r6','r7'];
+  var slotLabels={r0:'전공1',r1:'전공2',r2:'전공3',r3:'부전공1',r4:'부전공2',r5:'부전공3',r6:'부전공4',r7:'대체수업'};
 
   var html='<div style="display:flex;gap:8px;margin-bottom:10px">';
   html+='<button class="btn btn-pink" onclick="openM(\'modal-add-s\')" style="flex:1">+ 학생 추가</button>';
   html+='<button onclick="openBroadcastModal()" style="background:#7c3aed;color:white;border:none;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap">📢 전체메시지</button>';
-  html+='</div>';
-  html+='<div class="adm-section">';
+  html+='</div><div class="adm-section">';
 
   sorted.forEach(function(s){
     var curPickup=(s.pickupHistory||[]).find(function(h){return h.month===ym;});
     var pickupCls=curPickup&&curPickup.classId?DB.regularClasses.find(function(x){return x.id===curPickup.classId;}):null;
-    var slots=DB.regularClasses||[];
-    var slotKeys=['r0','r1','r2','r3','r4','r5','r6','r7'];
-    var hasClasses=slotKeys.some(function(k){return s.classes&&s.classes[k];});
+    var myClasses=[];
+    slotKeys.forEach(function(k){
+      if(s.classes&&s.classes[k]){
+        var cls=DB.regularClasses.find(function(x){return x.id===s.classes[k];});
+        if(cls) myClasses.push({label:slotLabels[k],cls:cls});
+      }
+    });
 
     html+='<div style="border-bottom:1px solid var(--border)">';
-    // 학생 헤더 행
     html+='<div style="display:flex;align-items:center;padding:10px 13px;gap:10px">';
     // 아바타
     if(s.photo){
-      html+='<img src="'+s.photo+'" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">';
+      html+='<img src="'+s.photo+'" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0" onclick="admViewStudent('+s.id+')" style="cursor:pointer">';
     } else {
-      var initial=s.name?s.name[0]:'?';
-      html+='<div style="width:36px;height:36px;border-radius:50%;background:var(--pink-bg);border:1.5px solid var(--pink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--pink);flex-shrink:0">'+initial+'</div>';
+      html+='<div onclick="admViewStudent('+s.id+')" style="width:36px;height:36px;border-radius:50%;background:var(--pink-bg);border:1.5px solid var(--pink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--pink);flex-shrink:0;cursor:pointer">'+(s.name?s.name[0]:'?')+'</div>';
     }
     // 이름/정보
-    html+='<div style="flex:1;min-width:0" onclick="admViewStudent('+s.id+')" style="cursor:pointer">';
-    html+='<div style="font-weight:800;font-size:14px;cursor:pointer" onclick="admViewStudent('+s.id+')">'+esc(s.name)+'</div>';
+    html+='<div style="flex:1;min-width:0;cursor:pointer" onclick="admViewStudent('+s.id+')">';
+    html+='<div style="font-weight:800;font-size:14px">'+esc(s.name)+'</div>';
     html+='<div style="font-size:11px;color:var(--gray)">'+esc(s.major||'전공없음')+' · '+esc(s.birth||'')+'</div>';
     if(pickupCls) html+='<div style="font-size:11px;color:var(--blue);margin-top:1px">🎯 픽업: '+esc(pickupCls.name)+'</div>';
     html+='</div>';
-    // 버튼들
+    // 버튼
     html+='<div style="display:flex;gap:4px;align-items:center">';
+    if(myClasses.length){
+      html+='<button onclick="toggleAdmCls('+s.id+')" style="background:var(--light);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">수업 ▾</button>';
+    }
     html+='<button onclick="admViewStudent('+s.id+')" style="background:var(--pink-bg);border:1px solid #fbb6d8;color:var(--pink);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">개인</button>';
     html+='<button onclick="openTeacherMsg('+s.id+')" style="background:#f3e8ff;border:1px solid #d8b4fe;color:#7c3aed;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">💌</button>';
-    html+='<button onclick="openPickupM('+s.id+')" style="background:#e0f2fe;border:1px solid #7dd3fc;color:#0369a1;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">픽업</button>';
     html+='<button onclick="openPwM('+s.id+')" style="background:var(--light);border:1px solid var(--border);color:var(--gray);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">🔑</button>';
     html+='<button class="del-btn" onclick="delStudent('+s.id+')">삭제</button>';
     html+='</div></div>';
 
-    // 수업 토글
-    if(hasClasses){
-      html+='<div id="adm-cls-'+s.id+'" style="display:none;padding:0 13px 10px;background:#fafafa">';
-      slotKeys.forEach(function(k){
-        var cls=s.classes&&s.classes[k]?DB.regularClasses.find(function(x){return x.id===s.classes[k];}):null;
-        if(cls){
-          html+='<div style="display:inline-block;background:white;border:1px solid var(--border);border-radius:6px;padding:3px 8px;margin:2px;font-size:11px">';
-          html+=esc(cls.name)+(cls.teacher?' · '+esc(cls.teacher):'');
-          html+='</div>';
-        }
+    // 수업 목록 (접힘)
+    if(myClasses.length){
+      html+='<div id="adm-cls-'+s.id+'" style="display:none;padding:6px 13px 10px;background:#fafafa;flex-wrap:wrap;gap:5px;display:none">';
+      myClasses.forEach(function(item){
+        var c=item.cls;
+        html+='<div style="display:inline-flex;align-items:center;gap:6px;background:white;border:1px solid var(--border);border-radius:8px;padding:5px 10px;margin:2px;font-size:12px">';
+        html+='<span style="font-size:10px;color:var(--gray)">'+item.label+'</span>';
+        html+='<span style="font-weight:700">'+esc(c.name)+'</span>';
+        if(c.teacher) html+='<span style="color:var(--gray);font-size:11px">'+esc(c.teacher)+'</span>';
+        if(c.day) html+='<span style="font-size:10px;color:var(--gray2)">'+esc(c.day)+'</span>';
+        html+='</div>';
       });
       html+='</div>';
-      // 수업 펼치기 버튼
-      var nameDiv=html.lastIndexOf('onclick="admViewStudent('+s.id+')">'+esc(s.name)+'</div>');
     }
     html+='</div>';
   });
@@ -2705,16 +2734,21 @@ function renderAdmStudents(c){
   c.innerHTML=html;
 }
 
+function toggleAdmCls(sid){
+  var el=document.getElementById('adm-cls-'+sid);
+  if(!el) return;
+  el.style.display=el.style.display==='none'||!el.style.display?'flex':'none';
+}
+
+
 function admViewStudent(sid){
-  // 관리자 모드에서 개인 페이지 열기
   curSid=sid;
   var s=DB.students.find(function(x){return x.id===sid;});
   if(!s) return;
-  document.getElementById('profile-name').textContent=s.name;
-  document.getElementById('profile-sub').textContent='개인 페이지';
+  var hd=document.getElementById('profile-hd');
+  if(hd) hd.textContent=s.name;
   renderProfile(s);
   showPage('page-profile');
-  // 개인 페이지에 관리자 퀵 버튼 표시
   setTimeout(function(){showAdmQuickBar(sid);},100);
 }
 
@@ -2724,11 +2758,10 @@ function showAdmQuickBar(sid){
   if(existing) existing.remove();
   var bar=document.createElement('div');
   bar.id='adm-quick-bar';
-  bar.style.cssText='position:fixed;bottom:70px;left:0;right:0;background:#7c3aed;padding:8px 16px;display:flex;gap:8px;z-index:900;justify-content:center';
-  bar.innerHTML='<span style="color:white;font-size:12px;font-weight:800;align-self:center">관리자:</span>'
-    +'<button onclick="openTeacherMsg('+sid+')" style="background:white;color:#7c3aed;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer">💌 메시지</button>'
-    +'<button onclick="openPickupM('+sid+')" style="background:white;color:#0369a1;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer">🎯 픽업지정</button>'
-    +'<button onclick="editStudent('+sid+')" style="background:white;color:var(--gray);border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer">✏️ 수정</button>';
+  bar.style.cssText='position:fixed;bottom:70px;left:0;right:0;background:#7c3aed;padding:10px 16px;display:flex;gap:8px;z-index:900;justify-content:center;box-shadow:0 -2px 12px rgba(0,0,0,.15)';
+  bar.innerHTML='<span style="color:rgba(255,255,255,.8);font-size:11px;font-weight:700;align-self:center;flex-shrink:0">관리자</span>'
+    +'<button onclick="openTeacherMsg('+sid+')" style="background:white;color:#7c3aed;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;flex:1;max-width:120px">💌 메시지</button>'
+    +'<button onclick="openPickupM('+sid+')" style="background:white;color:#0369a1;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;flex:1;max-width:120px">🎯 픽업지정</button>';
   document.body.appendChild(bar);
 }
 
@@ -2958,6 +2991,7 @@ function renderAdmPickup(c){
     }).join('')}
   </div>`;
 }
+function openPickupM(sid){ openPickupModal(sid); }
 function openPickupModal(sid){
   pickupSid=sid;const s=DB.students.find(x=>x.id===sid);
   document.getElementById('pickup-sname').textContent=s.name;
