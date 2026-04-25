@@ -1994,9 +1994,10 @@ function renderWeeklyList(s){
     var avgPct=total?Math.round(w.items.reduce(function(sum,i){return sum+(i.achievement||0);},0)/total):0;
     var avgColor=pctColor(avgPct);
 
+    var secId='wk-sec-'+s.id+'-'+wi;
     html+='<div style="border-bottom:1px solid var(--border)">';
     // 헤더
-    html+='<div onclick="'+( !isThisWeek?'toggleWeekSection(this)':'')+'" style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:'+(isThisWeek?'default':'pointer')+'">';
+    html+='<div onclick="'+( !isThisWeek?'toggleWkItems(this)':'')+'" style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:'+(isThisWeek?'default':'pointer')+'">';
     html+='<div style="flex:1">';
     html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">';
     html+='<div style="font-size:12px;font-weight:800;color:'+(isThisWeek?'var(--pink)':'var(--gray)')+'">'+( isThisWeek?'📍 이번 주':'📁 지난 주')+' · '+w.weekLabel+'</div>';
@@ -2012,11 +2013,11 @@ function renderWeeklyList(s){
     html+='<circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" stroke-width="3"/>';
     html+='<circle cx="18" cy="18" r="15" fill="none" stroke="'+avgColor+'" stroke-width="3" stroke-dasharray="'+Math.round(avgPct*0.942)+' 94.2" stroke-linecap="round" data-avg-wi="'+wi+'"/>';
     html+='</svg><div data-avg-txt="'+wi+'" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:var(--black)">'+avgPct+'%</div></div>';
-    if(!isThisWeek) html+='<span style="font-size:14px;color:var(--gray)">›</span>';
+    if(!isThisWeek) html+='<span class="wk-arrow" style="font-size:14px;color:var(--gray)">›</span>';
     html+='</div></div>';
 
     // 항목들
-    html+='<div class="week-items" style="display:'+(isThisWeek?'block':'none')+';padding:0 14px 10px">';
+    html+='<div class="week-items" id="wki-'+s.id+'-'+wi+'" style="display:'+(isThisWeek?'block':'none')+';padding:0 14px 10px">';
     w.items.forEach(function(item,ii){
       var ach=item.achievement||0;
       var color=pctColor(ach);
@@ -2097,6 +2098,28 @@ function renderWeeklyList(s){
 }
 
 
+function toggleWkItems(el){
+  // 헤더 div 클릭 → 바로 다음 .week-items 찾기
+  var parent=el.parentElement;
+  if(!parent) return;
+  var items=parent.querySelector('.week-items');
+  if(!items) return;
+  var isOpen=items.style.display==='block';
+  items.style.display=isOpen?'none':'block';
+  var arrow=el.querySelector('.wk-arrow');
+  if(arrow) arrow.textContent=isOpen?'›':'∨';
+}
+function toggleWeekSection(el){
+  // 클릭한 헤더의 다음 형제 .week-items 토글
+  var parent=el.parentElement;
+  if(!parent) return;
+  var items=parent.querySelector('.week-items');
+  if(!items) return;
+  var isOpen=items.style.display!=='none'&&items.style.display!=='';
+  items.style.display=isOpen?'none':'block';
+  var arrow=el.querySelector('.wk-arrow');
+  if(arrow) arrow.textContent=isOpen?'›':'∨';
+}
 function delWeeklyRecord(sid, weekKey){
   if(!confirm('이 주 기록을 삭제하시겠습니까?')) return;
   var s=DB.students.find(function(x){return x.id===sid;});
@@ -2684,8 +2707,23 @@ function renderAdmStudents(c){
     slotKeys.forEach(function(k){
       if(s.classes&&s.classes[k]){
         var cls=DB.regularClasses.find(function(x){return x.id===s.classes[k];});
-        if(cls) myClasses.push({label:slotLabels[k],cls:cls});
+        if(cls) myClasses.push({label:slotLabels[k],cls:cls,type:'regular'});
       }
+    });
+    // 픽업수업
+    var curPickupId=curPickup&&curPickup.classId;
+    if(curPickupId){
+      var pkCls=DB.regularClasses.find(function(x){return x.id===curPickupId;});
+      if(pkCls) myClasses.push({label:'픽업',cls:pkCls,type:'pickup'});
+    }
+    // 트레이닝 수업
+    var myTraining=(s.trainingSlots||{});
+    (DB.trainingSlots||[]).forEach(function(slot){
+      (slot.options||[]).forEach(function(opt){
+        if(myTraining[slot.key]===opt.id){
+          myClasses.push({label:'트레이닝',cls:{name:opt.name,teacher:opt.teacher||'',day:slot.day||''},type:'training'});
+        }
+      });
     });
 
     html+='<div style="border-bottom:1px solid var(--border)">';
@@ -2718,8 +2756,11 @@ function renderAdmStudents(c){
       html+='<div id="adm-cls-'+s.id+'" style="display:none;padding:6px 13px 10px;background:#fafafa;flex-wrap:wrap;gap:5px;display:none">';
       myClasses.forEach(function(item){
         var c=item.cls;
-        html+='<div style="display:inline-flex;align-items:center;gap:6px;background:white;border:1px solid var(--border);border-radius:8px;padding:5px 10px;margin:2px;font-size:12px">';
-        html+='<span style="font-size:10px;color:var(--gray)">'+item.label+'</span>';
+        var bg=item.type==='pickup'?'#fef9c3':item.type==='training'?'#dcfce7':'#eff6ff';
+        var border=item.type==='pickup'?'#fde68a':item.type==='training'?'#86efac':'#bfdbfe';
+        var labelColor=item.type==='pickup'?'#92400e':item.type==='training'?'#166534':'#1e40af';
+        html+='<div style="display:inline-flex;align-items:center;gap:5px;background:'+bg+';border:1px solid '+border+';border-radius:8px;padding:5px 10px;margin:2px;font-size:12px">';
+        html+='<span style="font-size:10px;font-weight:700;color:'+labelColor+'">'+item.label+'</span>';
         html+='<span style="font-weight:700">'+esc(c.name)+'</span>';
         if(c.teacher) html+='<span style="color:var(--gray);font-size:11px">'+esc(c.teacher)+'</span>';
         if(c.day) html+='<span style="font-size:10px;color:var(--gray2)">'+esc(c.day)+'</span>';
