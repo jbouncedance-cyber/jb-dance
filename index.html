@@ -2838,7 +2838,21 @@ function toggleAdmCls(sid){
 }
 
 
+var profileFromPage='page-main';
+
+function profileGoBack(){
+  var qb=document.getElementById('adm-quick-bar');
+  if(qb) qb.remove();
+  if(profileFromPage==='page-admin'){
+    showPage('page-admin');
+    renderAdmContent();
+  } else {
+    showPage('page-main');
+  }
+}
+
 async function admViewStudent(sid){
+  profileFromPage='page-admin';
   curSid=sid;
   var s=DB.students.find(function(x){return x.id===sid;});
   if(!s) return;
