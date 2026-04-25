@@ -1304,6 +1304,15 @@ function sendTeacherMsg(){
   renderAdmContent();
 }
 
+function delTeacherMsg(sid,msgId){
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  s.teacherMessages=(s.teacherMessages||[]).filter(function(x){return x.id!==msgId;});
+  save();saveStudent(s);
+  showToast('✅ 삭제됐어요');
+  openTeacherMsg(sid); // 목록 새로고침
+}
+
 function viewNotice(idx){
   var n=(DB.notices||[])[idx];
   if(!n) return;
@@ -1723,6 +1732,15 @@ function openProfile(id){
   if(wel) wel.innerHTML=renderWeeklyList(s);
   const ibt=document.getElementById('ib-table-'+id);
   if(ibt) ibt.innerHTML=renderIbTable(s);
+}
+function bindTeacherMsgBtns(){
+  document.querySelectorAll('.tm-read-btn').forEach(function(btn){
+    btn.onclick=function(){
+      var sid=parseInt(this.getAttribute('data-sid'));
+      var mid=this.getAttribute('data-mid');
+      markTeacherMsgRead(sid,mid);
+    };
+  });
 }
 function renderProfile(s){
   const lastIb=s.inbody&&s.inbody.length?s.inbody[s.inbody.length-1]:null;
@@ -2220,14 +2238,14 @@ function renderTeacherMessages(s){
   var parts=['<div class="card"><div class="card-head"><div class="card-title">💌 선생님의 한마디</div></div>'];
   display.forEach(function(m){
     var isNew=!m.read;
-    var readFn='markTeacherMsgRead('+s.id+','+JSON.stringify(m.id)+')';
     parts.push('<div style="padding:12px 14px;border-bottom:1px solid var(--border);'+(isNew?'background:var(--pink-bg)':'')+'">' );
     parts.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">');
     parts.push('<span style="font-size:11px;font-weight:700;color:var(--gray)">'+m.date+'</span>');
     if(isNew) parts.push('<span style="background:var(--pink);color:white;font-size:10px;font-weight:800;border-radius:10px;padding:2px 8px">NEW</span>');
     parts.push('</div>');
     parts.push('<div style="font-size:13px;line-height:1.6">'+esc(m.content).replace(/\n/g,'<br>')+'</div>');
-    if(isNew) parts.push('<button onclick="'+readFn+'" style="margin-top:8px;background:none;border:1px solid var(--pink);color:var(--pink);border-radius:8px;padding:4px 12px;font-size:11px;cursor:pointer;font-family:inherit">읽었어요 ✓</button>');
+    if(isNew) parts.push('<button class="tm-read-btn" data-sid="'+s.id+'" data-mid="'+m.id+'" style="margin-top:8px;background:none;border:1px solid var(--pink);color:var(--pink);border-radius:8px;padding:4px 12px;font-size:11px;cursor:pointer;font-family:inherit">읽었어요 ✓</button>');
+    else parts.push('<span style="font-size:11px;color:var(--gray);margin-top:4px;display:block">✓ 읽음</span>');
     parts.push('</div>');
   });
   if(msgs.length>2){
@@ -2252,9 +2270,12 @@ function markTeacherMsgRead(sid, msgId){
   const s=DB.students.find(function(x){return x.id===sid;});
   if(!s||!s.teacherMessages) return;
   const m=s.teacherMessages.find(function(x){return x.id===msgId;});
-  if(m) m.read=true;
-  save();saveStudent(s);
-  renderProfile(s);
+  if(m){
+    m.read=true;
+    save();saveStudent(s);
+    showToast('✅ 읽음 표시 완료!');
+    renderProfile(s);
+  }
 }
 
 function renderIbTable(s){
@@ -2375,6 +2396,7 @@ async function saveIb(){
   renderProfile(s);
   const ibt2=document.getElementById('ib-table-'+s.id);
   if(ibt2) ibt2.innerHTML=renderIbTable(s);
+  setTimeout(bindTeacherMsgBtns,50);
 }
 
 // ═══════════════════════════════════════════
@@ -2793,7 +2815,10 @@ function admViewStudent(sid){
   if(hd) hd.textContent=s.name;
   renderProfile(s);
   showPage('page-profile');
-  setTimeout(function(){showAdmQuickBar(sid);},100);
+  setTimeout(function(){
+    showAdmQuickBar(sid);
+    bindTeacherMsgBtns();
+  },100);
 }
 
 function showAdmQuickBar(sid){
@@ -3495,7 +3520,7 @@ if('serviceWorker' in navigator){
   });
 }
 // 버전 체크 - 업데이트시 자동 새로고침
-var BUILD_VER = '202604161047';
+var BUILD_VER = '202604250600';
 var savedVer = localStorage.getItem('jbd_ver');
 if(savedVer && savedVer !== BUILD_VER){
   localStorage.setItem('jbd_ver', BUILD_VER);
