@@ -1751,6 +1751,7 @@ function chkPin(){
 // PROFILE
 // ═══════════════════════════════════════════
 function openProfile(id){
+  profileFromPage='page-main';
   curSid=id;const s=DB.students.find(x=>x.id===id);
   document.getElementById('profile-hd').textContent=s.name;
   renderProfile(s);
@@ -1897,6 +1898,8 @@ function renderProfile(s){
     <div class="card-head"><div class="card-title">📊 인바디 기록</div><button class="sbtn pink" onclick="openIbModal(${s.id})">+ 추가</button></div>
     <div style="overflow-x:auto" id="ib-table-${s.id}"></div>
   </div>`;
+  // 인바디 테이블 채우기
+  setTimeout(function(){ var ibt=document.getElementById('ib-table-'+s.id); if(ibt) ibt.innerHTML=renderIbTable(s); }, 10);
 }
 
 function renderMonthlyGoalCard(s){
