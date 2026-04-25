@@ -1326,6 +1326,10 @@ function showPage(id){
   document.getElementById(id).classList.add('active');
   if(id==='page-main') renderMain();
   if(id==='page-schedule') renderSchedule();
+  if(id!=='page-profile'){
+    var qb=document.getElementById('adm-quick-bar');
+    if(qb) qb.remove();
+  }
 }
 function renderResourceBoard(){
   var w=document.getElementById('resource-board-wrap');
