@@ -2803,12 +2803,22 @@ function showAdmQuickBar(sid){
   var bar=document.createElement('div');
   bar.id='adm-quick-bar';
   bar.style.cssText='position:fixed;bottom:70px;left:0;right:0;background:#7c3aed;padding:10px 16px;display:flex;gap:8px;z-index:900;justify-content:center;box-shadow:0 -2px 12px rgba(0,0,0,.15)';
-  bar.dataset.sid=String(sid);
-  bar.innerHTML='<span style="color:rgba(255,255,255,.8);font-size:11px;font-weight:700;align-self:center;flex-shrink:0">관리자</span>'
-    +'<button id="qb-msg-btn" style="background:white;color:#7c3aed;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;flex:1;max-width:120px">💌 메시지</button>'
-    +'<button id="qb-pickup-btn" style="background:white;color:#0369a1;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;flex:1;max-width:120px">🎯 픽업지정</button>';
-  document.getElementById('qb-msg-btn').onclick=function(){openTeacherMsg(sid);};
-  document.getElementById('qb-pickup-btn').onclick=function(){openPickupModal(sid);};
+  // 버튼 직접 생성 (innerHTML 후 getElementById 타이밍 문제 방지)
+  var label=document.createElement('span');
+  label.style.cssText='color:rgba(255,255,255,.8);font-size:11px;font-weight:700;align-self:center;flex-shrink:0';
+  label.textContent='관리자';
+  var msgBtn=document.createElement('button');
+  msgBtn.style.cssText='background:white;color:#7c3aed;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;flex:1;max-width:130px';
+  msgBtn.textContent='💌 메시지';
+  msgBtn.onclick=function(){openTeacherMsg(sid);};
+  var pickupBtn=document.createElement('button');
+  pickupBtn.style.cssText='background:white;color:#0369a1;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;flex:1;max-width:130px';
+  pickupBtn.textContent='🎯 픽업지정';
+  pickupBtn.onclick=function(){openPickupModal(sid);};
+  bar.appendChild(label);
+  bar.appendChild(msgBtn);
+  bar.appendChild(pickupBtn);
+  document.body.appendChild(bar);
 }
 
 
