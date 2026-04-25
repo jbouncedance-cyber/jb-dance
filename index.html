@@ -1665,7 +1665,7 @@ function getStudentClasses(s){
   const train=[];
   DB.trainingSlots.forEach(ts=>{
     const id=s.classes?.[ts.slotKey];
-    if(id){const o=ts.options.find(x=>x.id===id);if(o) train.push({label:ts.label,name:o.name,teacher:o.teacher,day:o.day||'',timeStart:o.timeStart||'',timeEnd:o.timeEnd||'',type:'train'});}
+    if(id){const o=ts.options.find(x=>x.id===id);if(o) train.push({label:ts.label,name:o.name,teacher:o.teacher,day:o.day||'',timeStart:o.timeStart||'',timeEnd:o.timeEnd||'',type:'train',required:ts.required||false});}
   });
   // current pickup
   const now=new Date();
@@ -1710,7 +1710,10 @@ function renderStudentList(){
         ${train.length?`<div style="font-size:10px;font-weight:800;color:var(--blue);margin-bottom:5px;display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--blue);display:inline-block"></span>트레이닝</div>
         <div style="display:flex;flex-wrap:wrap;margin-bottom:${pickup?'8px':'0'}">${train.map(c=>{
           const t=c.timeStart?` ${c.day||''} ${c.timeStart}${c.timeEnd?'~'+c.timeEnd:''}`.trim():'';
-          return `<span class="chip-train"><span style="font-weight:700;color:var(--black)">${esc(c.name)}</span>${c.teacher?`<span style="color:var(--blue);font-size:11px"> · ${esc(c.teacher)}</span>`:''} ${t?`<span style="color:var(--gray);font-size:10px">${t}</span>`:''}</span>`;
+          const trainChipStyle=c.required?'background:#fff1f2;border:1px solid #fecdd3':'background:#f0f9ff;border:1px solid #bae6fd';
+          const trainBadgeColor=c.required?'var(--red)':'#0369a1';
+          const trainBadge=c.required?'필수':'배정';
+          return `<span class="chip-train" style="${trainChipStyle}"><span style="font-size:9px;font-weight:800;color:${trainBadgeColor};border:1px solid ${trainBadgeColor};border-radius:3px;padding:0 3px;margin-right:3px">${trainBadge}</span><span style="font-weight:700;color:var(--black)">${esc(c.name)}</span>${c.teacher?`<span style="color:${c.required?'var(--red)':'#0369a1'};font-size:11px"> · ${esc(c.teacher)}</span>`:''} ${t?`<span style="color:var(--gray);font-size:10px">${t}</span>`:''}</span>`;
         }).join('')}</div>`:''}
         ${pickup?`<div style="font-size:10px;font-weight:800;color:var(--teal);margin-bottom:5px;display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block"></span>이달의 픽업수업</div>
         <div style="display:flex;flex-wrap:wrap"><span class="chip-pickup"><span style="font-weight:700;color:var(--black)">${esc(pickup.name)}</span><span style="color:var(--teal);font-size:11px"> · ${esc(pickup.teacher)}</span></span></div>`:''}
@@ -1890,8 +1893,12 @@ function renderProfile(s){
           const sel=s.classes?.[ts.slotKey];
           const opt=sel?ts.options.find(x=>x.id===sel):null;
           const timeInfoT=opt&&opt.day?`${opt.day}${opt.timeStart?' '+opt.timeStart:''}${opt.timeEnd?'~'+opt.timeEnd:''}`:'';
-          return `<div class="cls-item${opt?' selected':''}" onclick="openTrainModal(${s.id},'${ts.slotKey}')">
-            <div class="cls-lbl">${esc(ts.label)}${ts.required?` <span style="color:var(--red);font-size:9px">필수</span>`:''}</div>
+          const trainBg=opt?(ts.required?'#fff1f2':'#f0f9ff'):'';
+          const trainBorder=opt?(ts.required?'#fecdd3':'#bae6fd'):'';
+          const trainLabel=ts.required?'필수':'배정';
+          const trainLabelColor=ts.required?'var(--red)':'#0369a1';
+          return `<div class="cls-item${opt?' selected':''}" style="${opt?`border-color:${trainBorder};background:${trainBg}`:''}" onclick="openTrainModal(${s.id},'${ts.slotKey}')">
+            <div class="cls-lbl">${esc(ts.label)}<span style="color:${trainLabelColor};font-size:9px;font-weight:800;margin-left:3px;border:1px solid ${trainLabelColor};border-radius:3px;padding:0 3px">${trainLabel}</span></div>
             ${opt?`<div class="cls-val">${esc(opt.name)}</div>${opt.teacher?`<div class="cls-teacher">• ${esc(opt.teacher)}</div>`:''}${timeInfoT?`<div style="font-size:10px;color:var(--gray);margin-top:2px">⏰ ${timeInfoT}</div>`:''}`
                  :`<div class="cls-val empty">${ts.options.length?'탭하여 선택':'미배정'}</div>`}
           </div>`;
