@@ -1762,6 +1762,41 @@ function openProfile(id){
   const ibt=document.getElementById('ib-table-'+id);
   if(ibt) ibt.innerHTML=renderIbTable(s);
 }
+function renderPickupHistory(s){
+  var hist=(s.pickupHistory||[]).filter(function(h){return h.classId;}).sort(function(a,b){return b.month.localeCompare(a.month);});
+  var now=new Date();
+  var curYm=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  var nextD=new Date(now.getFullYear(),now.getMonth()+1,1);
+  var nextYm=nextD.getFullYear()+'-'+String(nextD.getMonth()+1).padStart(2,'0');
+  if(!hist.length) return '<div style="text-align:center;padding:16px;color:var(--gray);font-size:13px">픽업수업이 아직 지정되지 않았어요</div>';
+  var html='';
+  hist.slice(0,6).forEach(function(h){
+    var c=DB.regularClasses.find(function(x){return x.id===h.classId;});
+    var isNow=h.month===curYm;
+    var isNext=h.month===nextYm;
+    var monthLabel=h.month.replace('-','년 ')+'월';
+    if(isNow) monthLabel+=' (이번달)';
+    else if(isNext) monthLabel+=' (다음달)';
+    var bg=isNow?'var(--teal-bg)':isNext?'#f0fdf4':'var(--light)';
+    var border=isNow?'var(--teal-bd)':isNext?'#86efac':'var(--border)';
+    var labelColor=isNow?'var(--teal)':isNext?'#16a34a':'var(--gray)';
+    html+='<div style="background:'+bg+';border:1px solid '+border+';border-radius:10px;padding:10px 13px;margin-bottom:8px">';
+    html+='<div style="font-size:10px;font-weight:800;color:'+labelColor+';margin-bottom:5px">'+monthLabel+'</div>';
+    if(c){
+      html+='<div style="display:flex;align-items:center;gap:8px">';
+      html+='<div style="font-size:22px">🎯</div>';
+      html+='<div><div style="font-weight:800;font-size:14px">'+esc(c.name)+'</div>';
+      html+='<div style="font-size:11px;color:var(--teal)">'+esc(c.teacher||'')+'</div>';
+      if(c.day) html+='<div style="font-size:11px;color:var(--gray)">⏰ '+esc(c.day)+(c.timeStart?' '+c.timeStart:'')+(c.timeEnd?'~'+c.timeEnd:'')+'</div>';
+      html+='</div></div>';
+    } else {
+      html+='<div style="color:var(--gray);font-size:13px">삭제된 수업</div>';
+    }
+    html+='</div>';
+  });
+  return html;
+}
+
 function bindTeacherMsgBtns(){
   document.querySelectorAll('.tm-read-btn').forEach(function(btn){
     btn.onclick=function(){
@@ -1835,29 +1870,10 @@ function renderProfile(s){
   <!-- 픽업 수업 -->
   <div class="card">
     <div class="card-head">
-      <div>
-        <div class="card-title">🎯 픽업수업 <span style="font-size:11px;color:var(--teal);font-weight:700">(이달: ${ym})</span></div>
-        <div style="font-size:11px;color:var(--gray);margin-top:2px">선생님이 매달 지정해 드려요</div>
-      </div>
+      <div class="card-title">🎯 픽업수업</div>
     </div>
-    <div class="card-body">
-      ${pickupCls?`
-        <div style="background:var(--teal-bg);border:1px solid var(--teal-bd);border-radius:10px;padding:11px 13px;display:flex;align-items:center;gap:10px">
-          <div style="font-size:22px">🎯</div>
-          <div>
-            <div style="font-weight:800;font-size:15px">${esc(pickupCls.name)}</div>
-            <div style="font-size:12px;color:var(--teal)">${esc(pickupCls.teacher)}</div>
-            ${pickupCls.day?`<div style="font-size:11px;color:var(--gray);margin-top:2px">⏰ ${pickupCls.day}${pickupCls.timeStart?' '+pickupCls.timeStart:''}${pickupCls.timeEnd?'~'+pickupCls.timeEnd:''}</div>`:''}
-          </div>
-        </div>`
-        :`<div style="text-align:center;padding:16px;color:var(--gray);font-size:13px">이달의 픽업수업이 아직 지정되지 않았어요</div>`}
-      ${(s.pickupHistory||[]).length>1?`
-      <div class="divider" style="margin:10px 0"></div>
-      <div style="font-size:11px;font-weight:800;color:var(--gray);margin-bottom:7px">📚 픽업수업 이력</div>
-      ${[...(s.pickupHistory||[])].sort((a,b)=>b.month.localeCompare(a.month)).slice(0,6).map(h=>{
-        const c=DB.regularClasses.find(x=>x.id===h.classId);
-        return `<div class="pickup-hist-item">${h.month} · <span style="font-weight:700">${c?esc(c.name):'삭제된 수업'}</span>${c?` <span style="color:var(--teal);font-size:11px">· ${esc(c.teacher)}</span>`:''}</div>`;
-      }).join('')}`:''}
+    <div class="card-body" id="pickup-section-${s.id}">
+      ${renderPickupHistory(s)}
     </div>
   </div>
 
