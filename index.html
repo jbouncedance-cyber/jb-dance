@@ -599,6 +599,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     <button class="tab-btn" onclick="admTab(this,'requests')">신청<span class="unread-cnt" id="req-badge" style="display:none">0</span></button>
     <button class="tab-btn" onclick="admTab(this,'notice')">공지</button>
     <button class="tab-btn" onclick="admTab(this,'resource')">영상/지식</button>
+    <button class="tab-btn" onclick="admTab(this,'search')">🔍 시간검색</button>
     <button class="tab-btn" onclick="admTab(this,'settings')">설정</button>
   </div>
   <div class="content" id="admin-content" style="padding-top:9px"></div>
@@ -2769,6 +2770,7 @@ function renderAdmContent(){
   else if(admTab_==='requests') renderAdmRequests(c);
   else if(admTab_==='notice') renderAdmNotice(c);
   else if(admTab_==='resource') renderAdmResource(c);
+  else if(admTab_==='search') renderAdmSearch(c);
   else if(admTab_==='settings') renderAdmSettings(c);
 }
 // updReqBadge - see above
@@ -3505,6 +3507,164 @@ function resetNoticeForm(){
 }
 
 // ── Settings
+function renderAdmSearch(c){
+  c.innerHTML=`
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-head"><div class="card-title">🔍 시간대별 학생 검색</div></div>
+    <div class="card-body">
+      <div style="font-size:12px;color:var(--gray);margin-bottom:12px">요일과 시간을 입력하면 해당 시간에 수업이 있거나 없는 학생을 찾아줘요</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">요일</label>
+          <select id="srch-day" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit">
+            <option value="">전체 요일</option>
+            <option value="월">월요일</option>
+            <option value="화">화요일</option>
+            <option value="수">수요일</option>
+            <option value="목">목요일</option>
+            <option value="금">금요일</option>
+            <option value="토">토요일</option>
+            <option value="일">일요일</option>
+          </select>
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">검색 유형</label>
+          <select id="srch-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit">
+            <option value="free">수업 없는 학생</option>
+            <option value="busy">수업 있는 학생</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">시작 시간</label>
+          <input type="time" id="srch-start" value="19:00" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit">
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">종료 시간</label>
+          <input type="time" id="srch-end" value="21:00" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit">
+        </div>
+      </div>
+      <button class="btn btn-pink" onclick="runAdmSearch()" style="width:100%">검색하기</button>
+    </div>
+  </div>
+  <div id="srch-result"></div>`;
+}
+
+function runAdmSearch(){
+  var day=document.getElementById('srch-day').value;
+  var type=document.getElementById('srch-type').value;
+  var startStr=document.getElementById('srch-start').value; // "19:00"
+  var endStr=document.getElementById('srch-end').value;
+
+  function toMin(t){ var p=t.split(':'); return parseInt(p[0])*60+parseInt(p[1]); }
+  var startMin=toMin(startStr);
+  var endMin=toMin(endStr);
+  if(startMin>=endMin){alert('종료 시간이 시작 시간보다 늦어야 해요');return;}
+
+  // 각 학생의 모든 수업 시간 추출
+  function getStudentSlots(s){
+    var slots=[];
+    // 정규수업
+    var regKeys=['r0','r1','r2','r3','r4','r5','r6','r7'];
+    regKeys.forEach(function(k){
+      var id=s.classes&&s.classes[k];
+      if(id){
+        var c=DB.regularClasses.find(function(x){return x.id===id;});
+        if(c&&c.day&&c.timeStart){
+          slots.push({day:c.day,start:toMin(c.timeStart),end:c.timeEnd?toMin(c.timeEnd):toMin(c.timeStart)+60,name:c.name,teacher:c.teacher||'',type:'regular'});
+        }
+      }
+    });
+    // 트레이닝
+    (DB.trainingSlots||[]).forEach(function(ts){
+      var id=s.classes&&s.classes[ts.slotKey];
+      if(id){
+        var o=(ts.options||[]).find(function(x){return x.id===id;});
+        if(o&&o.day&&o.timeStart){
+          slots.push({day:o.day,start:toMin(o.timeStart),end:o.timeEnd?toMin(o.timeEnd):toMin(o.timeStart)+60,name:o.name,teacher:o.teacher||'',type:'train'});
+        }
+      }
+    });
+    // 픽업수업 (이번달)
+    var now=new Date();
+    var ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+    var ph=(s.pickupHistory||[]).find(function(h){return h.month===ym;});
+    if(ph&&ph.classId){
+      var pc=DB.regularClasses.find(function(x){return x.id===ph.classId;});
+      if(pc&&pc.day&&pc.timeStart){
+        slots.push({day:pc.day,start:toMin(pc.timeStart),end:pc.timeEnd?toMin(pc.timeEnd):toMin(pc.timeStart)+60,name:'[픽업] '+pc.name,teacher:pc.teacher||'',type:'pickup'});
+      }
+    }
+    return slots;
+  }
+
+  function hasConflict(slots, day, startMin, endMin){
+    return slots.some(function(sl){
+      if(day && sl.day!==day) return false;
+      // 시간 겹침: sl.start < endMin && sl.end > startMin
+      return sl.start < endMin && sl.end > startMin;
+    });
+  }
+
+  var results=[];
+  DB.students.forEach(function(s){
+    var slots=getStudentSlots(s);
+    var conflict=hasConflict(slots, day, startMin, endMin);
+    var match=(type==='free')?!conflict:conflict;
+    if(match){
+      // 해당 요일 수업 정보
+      var daySlots=day?slots.filter(function(sl){return sl.day===day;}):slots;
+      results.push({student:s, slots:slots, daySlots:daySlots});
+    }
+  });
+
+  results.sort(function(a,b){return a.student.name.localeCompare(b.student.name,'ko');});
+
+  var dayLabel=day||'전체';
+  var typeLabel=type==='free'?'수업 없음':'수업 있음';
+  var html='<div class="adm-section">';
+  html+='<div style="padding:10px 13px;background:'+(type==='free'?'#f0fdf4':'var(--pink-bg)')+';border-bottom:1px solid var(--border);font-weight:800;font-size:13px;color:'+(type==='free'?'#166534':'var(--pink)')+'">';
+  html+=dayLabel+' '+startStr+'~'+endStr+' '+typeLabel+' · '+results.length+'명</div>';
+
+  if(!results.length){
+    html+='<div class="empty-msg" style="padding:20px">해당하는 학생이 없어요</div>';
+  } else {
+    results.forEach(function(r){
+      var s=r.student;
+      html+='<div style="padding:10px 13px;border-bottom:1px solid var(--border)">';
+      html+='<div style="display:flex;align-items:center;gap:10px">';
+      // 아바타
+      if(s.photo){
+        html+='<img src="'+s.photo+'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0">';
+      } else {
+        html+='<div style="width:32px;height:32px;border-radius:50%;background:var(--pink-bg);border:1.5px solid var(--pink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--pink);flex-shrink:0">'+(s.name?s.name[0]:'?')+'</div>';
+      }
+      html+='<div style="flex:1"><div style="font-weight:800;font-size:14px">'+esc(s.name)+'</div>';
+      html+='<div style="font-size:11px;color:var(--gray)">'+esc(s.major||'전공없음')+'</div>';
+      // 해당 요일 수업 표시
+      if(r.daySlots.length){
+        html+='<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">';
+        r.daySlots.forEach(function(sl){
+          var bg=sl.type==='pickup'?'#fef9c3':sl.type==='train'?'#f0f9ff':'#fce7f3';
+          var color=sl.type==='pickup'?'#92400e':sl.type==='train'?'#0369a1':'var(--pink)';
+          html+='<span style="background:'+bg+';color:'+color+';border-radius:6px;padding:2px 7px;font-size:11px;font-weight:700">';
+          html+=esc(sl.name)+(sl.teacher?' · '+esc(sl.teacher):'');
+          html+='</span>';
+        });
+        html+='</div>';
+      } else if(day) {
+        html+='<div style="font-size:11px;color:#16a34a;margin-top:3px">✓ '+day+'요일 빈 시간</div>';
+      }
+      html+='</div>';
+      html+='<button onclick="admViewStudent('+s.id+')" style="background:var(--pink-bg);border:1px solid #fbb6d8;color:var(--pink);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit;flex-shrink:0">개인</button>';
+      html+='</div></div>';
+    });
+  }
+  html+='</div>';
+  document.getElementById('srch-result').innerHTML=html;
+}
+
 function renderAdmSettings(c){
   c.innerHTML=`<div class="card">
     <div class="card-head"><div class="card-title">🔐 관리자 비밀번호 변경</div></div>
