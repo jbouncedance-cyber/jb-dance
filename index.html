@@ -2041,7 +2041,9 @@ function updField(id,field,value){
   const s=DB.students.find(x=>x.id===id);if(!s) return;
   if(field==='monthly'){if(!s.goals)s.goals={};s.goals.monthly=value;}
   else if(field==='dancer'){if(!s.goals)s.goals={};s.goals.dancer=value;}
-  save('student',id);
+  save();
+  var _us=DB.students.find(function(x){return x.id===id;});
+  if(_us && window.fb) window.fb.saveStudent(_us);
 }
 
 // ─── WEEKLY CHECKLIST ───
@@ -2266,7 +2268,8 @@ function toggleWeekly(sid,wk,ii){
   const item=w.items[ii];
   item.checked=!item.checked;
   item.checkedDate=item.checked?new Date().toLocaleDateString('ko-KR'):'';
-  save('student',sid);
+  save();
+  if(window.fb) window.fb.saveStudent(s);
   const el=document.getElementById('weekly-list-'+sid);
   if(el) el.innerHTML=renderWeeklyList(s);
 }
@@ -2286,7 +2289,7 @@ function saveMajor(){
   const custom=document.getElementById('major-custom').value.trim();
   const sel=document.getElementById('major-select').value;
   s.major=custom||sel;
-  save('student',s.id);closeM('modal-major');renderProfile(s);renderStudentList();
+  save();if(window.fb) window.fb.saveStudent(s);closeM('modal-major');renderProfile(s);renderStudentList();
 }
 
 // Inbody
@@ -2950,11 +2953,15 @@ function addStudent(){
   if(pw.length!==4||!/^\d+$/.test(pw)){alert('비밀번호는 숫자 4자리여야 합니다');return}
   const newS={id:Date.now(),name,birth,major,pw,photo:'',classes:{},goals:{monthly:'',dancer:''},inbody:[],pickupHistory:[],monthlyGoals:[],teacherMessages:[]};
   DB.students.push(newS);
-  save('student',newS.id);closeM('modal-add-s');renderAdmContent();
+  save();
+  if(window.fb) window.fb.saveStudent(newS);
+  closeM('modal-add-s');
+  renderAdmContent();
+  showToast('✅ '+newS.name+' 학생 추가 완료!');
 }
 function delStudent(id){if(!confirm('정말 삭제하시겠습니까?')) return;DB.students=DB.students.filter(x=>x.id!==id);DB.requests=DB.requests.filter(x=>x.studentId!==id);save();if(window.fbDeleteStudent) window.fbDeleteStudent(id);renderAdmContent();}
 function openPwM(id){curSid=id;const s=DB.students.find(x=>x.id===id);document.getElementById('pw-sname').textContent=s.name;document.getElementById('new-pw').value='';openM('modal-pw');}
-function saveStudentPw(){const pw=document.getElementById('new-pw').value;if(pw.length!==4||!/^\d+$/.test(pw)){alert('비밀번호는 숫자 4자리여야 합니다');return}const s=DB.students.find(x=>x.id===curSid);s.pw=pw;save('student',s.id);closeM('modal-pw');alert(`${s.name} 비밀번호 변경 완료!`);}
+function saveStudentPw(){const pw=document.getElementById('new-pw').value;if(pw.length!==4||!/^\d+$/.test(pw)){alert('비밀번호는 숫자 4자리여야 합니다');return}const s=DB.students.find(x=>x.id===curSid);s.pw=pw;save();if(window.fb) window.fb.saveStudent(s);closeM('modal-pw');alert(`${s.name} 비밀번호 변경 완료!`);}
 
 // ── Classes
 const DAYS_OPT=['월','화','수','목','금','토','일'];
