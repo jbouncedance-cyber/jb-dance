@@ -2962,21 +2962,27 @@ function renderAdmStudents(c){
     }
     // 이름/정보
     html+='<div style="flex:1;min-width:0;cursor:pointer" onclick="admViewStudent('+s.id+')">';
-    html+='<div style="font-weight:800;font-size:14px;'+(s.inactive?'color:var(--gray);text-decoration:line-through':'')+'">'+(s.inactive?'[퇴원] ':'')+esc(s.name)+'</div>';
-    html+='<div style="font-size:11px;color:var(--gray)">'+esc(s.major||'전공없음')+' · '+esc(s.birth||'')+'</div>';
+    html+='<div style="font-weight:800;font-size:14px;'+(s.inactive?'color:var(--gray);text-decoration:line-through':')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis'+'">'+(s.inactive?'[퇴원] ':'')+esc(s.name)+'</div>';
+    html+='<div style="font-size:11px;color:var(--gray);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(s.major||'전공없음')+' · '+esc(s.birth||'')+'</div>';
     if(pickupCls) html+='<div style="font-size:11px;color:var(--blue);margin-top:1px">🎯 픽업: '+esc(pickupCls.name)+(pickupCls.teacher?' · '+esc(pickupCls.teacher):'')+'</div>';
     html+='</div>';
-    // 버튼
-    html+='<div style="display:flex;gap:4px;align-items:center">';
+    // 버튼 - 2줄로 나눠서 모바일 깨짐 방지
+    html+='<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">';
+    // 1줄: 수업개수 + 개인
+    html+='<div style="display:flex;gap:4px">';
     if(myClasses.length){
       var realCount=myClasses.filter(function(x){return x.type!=='subst';}).length;
       html+='<button onclick="toggleAdmCls('+s.id+')" style="background:var(--light);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">수업 '+realCount+'개 ▾</button>';
     }
     html+='<button onclick="admViewStudent('+s.id+')" style="background:var(--pink-bg);border:1px solid #fbb6d8;color:var(--pink);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">개인</button>';
+    html+='</div>';
+    // 2줄: 💌 🔑 퇴원/복귀 삭제
+    html+='<div style="display:flex;gap:4px">';
     html+='<button onclick="openTeacherMsg('+s.id+')" style="background:#f3e8ff;border:1px solid #d8b4fe;color:#7c3aed;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">💌</button>';
     html+='<button onclick="openPwM('+s.id+')" style="background:var(--light);border:1px solid var(--border);color:var(--gray);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">🔑</button>';
-    html+='<button onclick="toggleInactive('+s.id+')" style="background:'+(s.inactive?'#fef3c7':'#f1f5f9')+';border:1px solid '+(s.inactive?'#fde68a':'#cbd5e1')+';color:'+(s.inactive?'#92400e':'#64748b')+';border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit;margin-right:4px">'+(s.inactive?'🔓 복귀':'🔒 퇴원')+'</button>';
+    html+='<button onclick="toggleInactive('+s.id+')" style="background:'+(s.inactive?'#fef3c7':'#f1f5f9')+';border:1px solid '+(s.inactive?'#fde68a':'#cbd5e1')+';color:'+(s.inactive?'#92400e':'#64748b')+';border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">'+(s.inactive?'🔓 복귀':'🔒 퇴원')+'</button>';
     html+='<button class="del-btn" onclick="delStudent('+s.id+')">삭제</button>';
+    html+='</div>';
     html+='</div></div>';
 
     // 수업 목록 (접힘)
