@@ -25,7 +25,7 @@
   --teal:#0d9488;--teal-bg:#f0fdfa;--teal-bd:#99f6e4;
 }
 body{font-family:'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;background:var(--light);color:var(--black);min-height:100vh;overflow-x:hidden;font-size:15px}
-.page{display:none;position:fixed;top:0;left:0;right:0;bottom:0;flex-direction:column;overflow-y:auto;background:#fff}
+.page{display:none;position:fixed;top:0;left:0;right:0;bottom:0;flex-direction:column;overflow:hidden;background:#fff}
 .page.active{display:flex}
 .header{background:var(--white);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100}
 .logo{font-size:18px;font-weight:900;color:var(--pink);letter-spacing:-1px}
@@ -40,7 +40,7 @@ body{font-family:'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif
 .nav-btn{flex:1;background:none;border:none;padding:9px 0 7px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;font-size:10px;color:var(--gray2);font-family:inherit}
 .nav-btn.active{color:var(--pink)}
 .nav-icon{font-size:20px;line-height:1.2}
-.content{flex:1;padding:12px 12px 90px}
+.content{flex:1;padding:12px 12px 90px;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .card{background:var(--white);border-radius:14px;border:1px solid var(--border);margin-bottom:10px;overflow:hidden}
 .card-head{padding:11px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);gap:8px}
 .card-title{font-size:14px;font-weight:700}
@@ -1468,6 +1468,8 @@ function showPage(id){
   document.getElementById(id).classList.add('active');
   if(id==='page-main') renderMain();
   if(id==='page-schedule') renderSchedule();
+  if(id==='page-admin') renderAdmContent();
+  if(id==='page-login') initLoginPage();
   if(id!=='page-profile'){
     var qb=document.getElementById('adm-quick-bar');
     if(qb) qb.remove();
@@ -2888,7 +2890,7 @@ function delEv(id){if(!confirm('삭제하시겠습니까?')) return;DB.events=DB
 // ═══════════════════════════════════════════
 // ADMIN
 // ═══════════════════════════════════════════
-function goAdmin(){if(isAdmin){showPage('page-admin');renderAdmContent();return;}document.getElementById('admin-pw-input').value='';document.getElementById('admin-pw-err').textContent='';showPage('page-admin-lock');}
+function goAdmin(){if(isAdmin){showPage('page-admin');return;}document.getElementById('admin-pw-input').value='';document.getElementById('admin-pw-err').textContent='';showPage('page-admin-lock');}
 function checkAdminPw(){if(document.getElementById('admin-pw-input').value===DB.adminPw){isAdmin=true;showPage('page-admin');renderAdmContent();}else document.getElementById('admin-pw-err').textContent='비밀번호가 틀렸습니다';}
 function adminOut(){ doLogout(); }
 
