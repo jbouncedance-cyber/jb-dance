@@ -1000,6 +1000,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 // ═══════════════════════════════════════════
 window.DB = {
   adminPw:'1234', notice:'',
+  resources:[],
   students:[
     {id:1,name:'김민지',birth:'2005-03-12',major:'팝핑',pw:'1111',photo:'',classes:{},goals:{monthly:'',dancer:''},inbody:[],pickupHistory:[]},
     {id:2,name:'이서연',birth:'2005-07-22',major:'락킹',pw:'2222',photo:'',classes:{},goals:{monthly:'',dancer:''},inbody:[],pickupHistory:[]},
@@ -2962,7 +2963,7 @@ function renderAdmStudents(c){
     }
     // 이름/정보
     html+='<div style="flex:1;min-width:0;cursor:pointer" onclick="admViewStudent('+s.id+')">';
-    html+='<div style="font-weight:800;font-size:14px;'+(s.inactive?'color:var(--gray);text-decoration:line-through':')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis'+'">'+(s.inactive?'[퇴원] ':'')+esc(s.name)+'</div>';
+    html+='<div style="font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+(s.inactive?'color:var(--gray);text-decoration:line-through':'')+'">'+(s.inactive?'[퇴원] ':'')+esc(s.name)+'</div>';
     html+='<div style="font-size:11px;color:var(--gray);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(s.major||'전공없음')+' · '+esc(s.birth||'')+'</div>';
     if(pickupCls) html+='<div style="font-size:11px;color:var(--blue);margin-top:1px">🎯 픽업: '+esc(pickupCls.name)+(pickupCls.teacher?' · '+esc(pickupCls.teacher):'')+'</div>';
     html+='</div>';
