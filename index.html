@@ -1201,9 +1201,8 @@ function doLogin(){
     if(pw===DB.adminPw||pw==='7878'){
       saveLoginSession('__admin__', null);
       isAdmin=true;
-      admTab_='students';
-      showPage('page-admin');
-      renderAdmContent();
+      renderMain();
+      showPage('page-main');
     } else {
       err.textContent='비밀번호가 틀렸습니다';
     }
@@ -1218,12 +1217,8 @@ function doLogin(){
 
   saveLoginSession('student', sid);
   curSid=sid;
-  profileFromPage='page-main';
-  var hd=document.getElementById('profile-hd');
-  if(hd) hd.textContent=s.name;
-  renderProfile(s);
-  showPage('page-profile');
-  setTimeout(bindTeacherMsgBtns, 80);
+  renderMain();
+  showPage('page-main');
 }
 
 function saveLoginSession(role, sid){
@@ -1239,21 +1234,16 @@ function checkLoginSession(){
     if(Date.now()>sess.expire){localStorage.removeItem('jbd_session');return false;}
     if(sess.role==='__admin__'){
       isAdmin=true;
-      admTab_='students';
-      showPage('page-admin');
-      renderAdmContent();
+      renderMain();
+      showPage('page-main');
       return true;
     }
     if(sess.role==='student'&&sess.sid){
       var s=DB.students.find(function(x){return x.id===sess.sid;});
       if(!s||s.inactive){localStorage.removeItem('jbd_session');return false;}
       curSid=sess.sid;
-      profileFromPage='page-main';
-      var hd=document.getElementById('profile-hd');
-      if(hd) hd.textContent=s.name;
-      renderProfile(s);
-      showPage('page-profile');
-      setTimeout(bindTeacherMsgBtns, 80);
+      renderMain();
+      showPage('page-main');
       return true;
     }
   }catch(e){}
