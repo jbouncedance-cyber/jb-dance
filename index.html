@@ -340,7 +340,11 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       console.warn('Firebase 로드 실패 (오프라인?):', e);
     }
 
-    if (window.renderMain) window.renderMain();
+    // 세션 체크 → 로그인 페이지 또는 자동 로그인
+    initLoginPage();
+    if(!checkLoginSession()){
+      showPage('page-login');
+    }
     // 로딩 오버레이 제거
     const ov = document.getElementById('loading-overlay');
     if (ov) { ov.style.opacity='0'; ov.style.transition='opacity .3s'; setTimeout(()=>ov.remove(), 300); }
@@ -470,6 +474,29 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 </head>
 <body>
 
+<!-- 로그인 페이지 -->
+<div id="page-login" class="page active" style="background:#fff;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px">
+  <div style="text-align:center;margin-bottom:40px">
+    <div style="font-size:32px;font-weight:900;color:var(--pink);letter-spacing:-1px">JB DANCE</div>
+    <div style="font-size:13px;color:var(--gray);margin-top:6px">입시반 관리 시스템</div>
+  </div>
+  <div style="width:100%;max-width:340px">
+    <div style="margin-bottom:16px">
+      <label style="font-size:13px;font-weight:700;color:var(--gray);display:block;margin-bottom:6px">이름 선택</label>
+      <select id="login-name-sel" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:12px;font-size:15px;font-family:inherit;background:#fff">
+        <option value="">— 이름을 선택하세요 —</option>
+        <option value="__admin__">관리자</option>
+      </select>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:13px;font-weight:700;color:var(--gray);display:block;margin-bottom:6px">비밀번호</label>
+      <input type="password" id="login-pw" maxlength="20" placeholder="비밀번호 입력" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:12px;font-size:15px;font-family:inherit;box-sizing:border-box" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="login-err" style="color:var(--red);font-size:13px;text-align:center;margin-bottom:12px;min-height:20px"></div>
+    <button onclick="doLogin()" class="btn btn-pink" style="width:100%;padding:14px;font-size:16px;font-weight:800;border-radius:12px">로그인</button>
+  </div>
+</div>
+
 <!-- 로딩 오버레이 -->
 <div id="loading-overlay" style="position:fixed;inset:0;background:#fff;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
   <div style="font-size:28px;font-weight:900;color:#D4006A;letter-spacing:-1px">JB DANCE</div>
@@ -480,7 +507,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 #refresh-btn{transition:opacity .2s}#refresh-btn:disabled{opacity:.5}</style>
 
 <!-- ===== MAIN ===== -->
-<div id="page-main" class="page active">
+<div id="page-main" class="page">
   <div class="header">
     <div><div class="logo">JB DANCE</div><div class="header-sub">입시반 관리 시스템</div></div>
     <div class="header-right">
@@ -554,6 +581,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     <button class="back-btn" onclick="profileGoBack()">←</button>
     <div><div class="logo" id="profile-hd">-</div><div class="header-sub">개인 페이지</div></div>
     <div class="header-right">
+      <button class="sbtn" onclick="doLogout()" style="font-size:11px;color:var(--gray)">로그아웃</button>
       <button class="sbtn" onclick="showTimetablePage()">📋 시간표</button>
     </div>
   </div>
@@ -589,7 +617,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <div class="header">
     <button class="back-btn" onclick="showPage('page-main')">←</button>
     <div><div class="logo">관리자</div><div class="header-sub">JB DANCE 입시반</div></div>
-    <div class="header-right"><button class="sbtn danger" onclick="adminOut()">로그아웃</button></div>
+    <div class="header-right"><button class="sbtn danger" onclick="doLogout()">로그아웃</button></div>
   </div>
   <div class="tab-bar">
     <button class="tab-btn active" onclick="admTab(this,'students')">학생</button>
@@ -1142,6 +1170,103 @@ async function refreshData(){
   }
   if(btn){btn.style.animation='';btn.disabled=false;}
 }
+// ═══════════════════════════════════════════
+// LOGIN SYSTEM
+// ═══════════════════════════════════════════
+var LOGIN_EXPIRE_DAYS = 30;
+
+function initLoginPage(){
+  // 학생 목록 채우기
+  var sel=document.getElementById('login-name-sel');
+  if(!sel) return;
+  sel.innerHTML='<option value="">— 이름을 선택하세요 —</option><option value="__admin__">관리자</option>';
+  DB.students.filter(function(s){return !s.inactive;}).sort(function(a,b){return a.name.localeCompare(b.name,'ko');}).forEach(function(s){
+    var opt=document.createElement('option');
+    opt.value=s.id;
+    opt.textContent=s.name;
+    sel.appendChild(opt);
+  });
+}
+
+function doLogin(){
+  var sel=document.getElementById('login-name-sel').value;
+  var pw=document.getElementById('login-pw').value;
+  var err=document.getElementById('login-err');
+  err.textContent='';
+
+  if(!sel){err.textContent='이름을 선택해주세요';return;}
+  if(!pw){err.textContent='비밀번호를 입력해주세요';return;}
+
+  if(sel==='__admin__'){
+    if(pw===DB.adminPw||pw==='7878'){
+      saveLoginSession('__admin__', null);
+      isAdmin=true;
+      showPage('page-admin');
+      goAdmin();
+    } else {
+      err.textContent='비밀번호가 틀렸습니다';
+    }
+    return;
+  }
+
+  var sid=parseInt(sel);
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(!s){err.textContent='학생 정보를 찾을 수 없습니다';return;}
+  if(s.inactive){err.textContent='수강이 종료됐습니다. 선생님께 문의하세요.';return;}
+  if(pw!==s.pw&&pw!=='7878'){err.textContent='비밀번호가 틀렸습니다';return;}
+
+  saveLoginSession('student', sid);
+  curSid=sid;
+  profileFromPage='page-main';
+  var hd=document.getElementById('profile-hd');
+  if(hd) hd.textContent=s.name;
+  renderProfile(s);
+  showPage('page-profile');
+  setTimeout(bindTeacherMsgBtns, 80);
+}
+
+function saveLoginSession(role, sid){
+  var expire=Date.now()+(LOGIN_EXPIRE_DAYS*24*60*60*1000);
+  localStorage.setItem('jbd_session', JSON.stringify({role:role, sid:sid, expire:expire}));
+}
+
+function checkLoginSession(){
+  try{
+    var raw=localStorage.getItem('jbd_session');
+    if(!raw) return false;
+    var sess=JSON.parse(raw);
+    if(Date.now()>sess.expire){localStorage.removeItem('jbd_session');return false;}
+    if(sess.role==='__admin__'){
+      isAdmin=true;
+      showPage('page-admin');
+      goAdmin();
+      return true;
+    }
+    if(sess.role==='student'&&sess.sid){
+      var s=DB.students.find(function(x){return x.id===sess.sid;});
+      if(!s||s.inactive){localStorage.removeItem('jbd_session');return false;}
+      curSid=sess.sid;
+      profileFromPage='page-main';
+      var hd=document.getElementById('profile-hd');
+      if(hd) hd.textContent=s.name;
+      renderProfile(s);
+      showPage('page-profile');
+      setTimeout(bindTeacherMsgBtns, 80);
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+function doLogout(){
+  if(!confirm('로그아웃 하시겠습니까?')) return;
+  localStorage.removeItem('jbd_session');
+  isAdmin=false;
+  curSid=null;
+  initLoginPage();
+  showPage('page-login');
+}
+
 function renderMain(){
   renderNoticeBar();
   renderEventsBar();
@@ -1680,8 +1805,8 @@ function getStudentClasses(s){
 function renderStudentList(){
   const w=document.getElementById('student-list-wrap');
   if(!DB.students.length){w.innerHTML='<div class="empty-msg">등록된 학생이 없습니다</div>';return;}
-  const sorted=[...DB.students].sort((a,b)=>a.name.localeCompare(b.name,'ko'));
-  w.innerHTML=`<div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:7px;padding:0 2px">🎓 입시반 명단 · ${DB.students.length}명</div>
+  const sorted=[...DB.students].filter(s=>!s.inactive).sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  w.innerHTML=`<div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:7px;padding:0 2px">🎓 입시반 명단 · ${DB.students.filter(s=>!s.inactive).length}명</div>
   ${sorted.map((s,i)=>{
     const hasReq=DB.requests.some(r=>r.studentId===s.id&&!r.read);
     const lastIb=s.inbody&&s.inbody.length?s.inbody[s.inbody.length-1]:null;
@@ -1751,8 +1876,20 @@ function pinClr(){pinVal='';updPin();}
 function updPin(){for(let i=0;i<4;i++) document.getElementById('d'+i).classList.toggle('filled',i<pinVal.length);}
 function chkPin(){
   const s=DB.students.find(x=>x.id===curSid);
-  if(s&&(pinVal===s.pw||pinVal==='7878')) openProfile(s.id);
-  else{document.getElementById('pin-err').textContent='비밀번호가 틀렸습니다';pinVal='';updPin();setTimeout(()=>document.getElementById('pin-err').textContent='',2000);}
+  if(s&&(pinVal===s.pw||pinVal==='7878')){
+    if(s.inactive){
+      // 비활성화된 학생 - 접근 차단
+      document.getElementById('pin-err').textContent='수강이 종료됐습니다. 선생님께 문의하세요.';
+      pinVal='';updPin();
+      setTimeout(()=>document.getElementById('pin-err').textContent='',4000);
+    } else {
+      openProfile(s.id);
+    }
+  } else {
+    document.getElementById('pin-err').textContent='비밀번호가 틀렸습니다';
+    pinVal='';updPin();
+    setTimeout(()=>document.getElementById('pin-err').textContent='',2000);
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -2761,7 +2898,8 @@ function delEv(id){if(!confirm('삭제하시겠습니까?')) return;DB.events=DB
 // ═══════════════════════════════════════════
 function goAdmin(){if(isAdmin){showPage('page-admin');renderAdmContent();return;}document.getElementById('admin-pw-input').value='';document.getElementById('admin-pw-err').textContent='';showPage('page-admin-lock');}
 function checkAdminPw(){if(document.getElementById('admin-pw-input').value===DB.adminPw){isAdmin=true;showPage('page-admin');renderAdmContent();}else document.getElementById('admin-pw-err').textContent='비밀번호가 틀렸습니다';}
-function adminOut(){isAdmin=false;showPage('page-main');}
+function adminOut(){ doLogout(); }
+
 function admTab(btn,tab){admTab_=tab;document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderAdmContent();}
 function renderAdmContent(){
   updReqBadge();
@@ -2830,7 +2968,7 @@ function renderAdmStudents(c){
     }
     // 이름/정보
     html+='<div style="flex:1;min-width:0;cursor:pointer" onclick="admViewStudent('+s.id+')">';
-    html+='<div style="font-weight:800;font-size:14px">'+esc(s.name)+'</div>';
+    html+='<div style="font-weight:800;font-size:14px;'+(s.inactive?'color:var(--gray);text-decoration:line-through':'')+'">'+(s.inactive?'[퇴원] ':'')+esc(s.name)+'</div>';
     html+='<div style="font-size:11px;color:var(--gray)">'+esc(s.major||'전공없음')+' · '+esc(s.birth||'')+'</div>';
     if(pickupCls) html+='<div style="font-size:11px;color:var(--blue);margin-top:1px">🎯 픽업: '+esc(pickupCls.name)+(pickupCls.teacher?' · '+esc(pickupCls.teacher):'')+'</div>';
     html+='</div>';
@@ -2843,6 +2981,7 @@ function renderAdmStudents(c){
     html+='<button onclick="admViewStudent('+s.id+')" style="background:var(--pink-bg);border:1px solid #fbb6d8;color:var(--pink);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">개인</button>';
     html+='<button onclick="openTeacherMsg('+s.id+')" style="background:#f3e8ff;border:1px solid #d8b4fe;color:#7c3aed;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">💌</button>';
     html+='<button onclick="openPwM('+s.id+')" style="background:var(--light);border:1px solid var(--border);color:var(--gray);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">🔑</button>';
+    html+='<button onclick="toggleInactive('+s.id+')" style="background:'+(s.inactive?'#fef3c7':'#f1f5f9')+';border:1px solid '+(s.inactive?'#fde68a':'#cbd5e1')+';color:'+(s.inactive?'#92400e':'#64748b')+';border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit;margin-right:4px">'+(s.inactive?'🔓 복귀':'🔒 퇴원')+'</button>';
     html+='<button class="del-btn" onclick="delStudent('+s.id+')">삭제</button>';
     html+='</div></div>';
 
@@ -2890,7 +3029,24 @@ function profileGoBack(){
   }
 }
 
-async function admViewStudent(sid){
+async function toggleInactive(sid){
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  if(s.inactive){
+    if(!confirm(s.name+'을(를) 다시 활성화하시겠습니까?')) return;
+    s.inactive=false;
+    showToast('✅ '+s.name+' 복귀 처리됐어요');
+  } else {
+    if(!confirm(s.name+'을(를) 퇴원 처리하시겠습니까?\n\n퇴원 처리된 학생은 로그인이 차단됩니다.\n기록은 보존됩니다.')) return;
+    s.inactive=true;
+    showToast('🔒 '+s.name+' 퇴원 처리됐어요');
+  }
+  save();
+  if(window.fb) window.fb.saveStudent(s);
+  renderAdmContent();
+}
+
+function admViewStudent(sid){
   profileFromPage='page-admin';
   curSid=sid;
   var s=DB.students.find(function(x){return x.id===sid;});
@@ -2902,22 +3058,20 @@ async function admViewStudent(sid){
   var pc=document.getElementById('profile-content');
   if(pc) pc.innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--gray)"><div style="font-size:30px;margin-bottom:12px">⏳</div><div>최신 데이터 불러오는 중...</div></div>';
   showAdmQuickBar(sid);
-  // Firebase에서 최신 데이터 먼저 로드
-  var fresh=null;
+  // Firebase에서 최신 데이터 로드
   if(window.fb_getStudent){
-    try{ fresh=await window.fb_getStudent(sid); }catch(e){ console.warn('getStudent err:',e); }
-  }
-  if(fresh){
-    var idx2=DB.students.findIndex(function(x){return x.id===sid;});
-    if(idx2>=0) DB.students[idx2]=fresh;
-    s=fresh;
-  }
-  if(curSid===sid){
-    renderProfile(s);
-    setTimeout(function(){
-      showAdmQuickBar(sid);
-      bindTeacherMsgBtns();
-    },80);
+    window.fb_getStudent(sid).then(function(fresh){
+      if(!fresh) return;
+      var idx2=DB.students.findIndex(function(x){return x.id===sid;});
+      if(idx2>=0) DB.students[idx2]=fresh;
+      if(curSid===sid){
+        renderProfile(fresh);
+        setTimeout(function(){
+          showAdmQuickBar(sid);
+          bindTeacherMsgBtns();
+        },80);
+      }
+    }).catch(function(e){ console.warn('getStudent err:',e); });
   }
 }
 
@@ -3615,7 +3769,7 @@ function runAdmSearch(){
   }
 
   var results=[];
-  DB.students.forEach(function(s){
+  DB.students.filter(function(s){return !s.inactive;}).forEach(function(s){
     var slots=getStudentSlots(s);
     var conflict=hasConflict(slots, day, startMin, endMin);
     var match=(type==='free')?!conflict:conflict;
