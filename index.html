@@ -1790,7 +1790,7 @@ function getStudentClasses(s){
   const ph=(s.pickupHistory||[]).find(h=>h.month===ym);
   let pickup=null;
   if(ph&&ph.classId){const c=DB.regularClasses.find(x=>x.id===ph.classId);if(c) pickup={name:c.name,teacher:c.teacher,month:ym};}
-  return {reg,train,pickup};
+  return {reg,train,pickup,subst:substCls};
 }
 
 function renderStudentList(){
@@ -1801,7 +1801,7 @@ function renderStudentList(){
   ${sorted.map((s,i)=>{
     const hasReq=DB.requests.some(r=>r.studentId===s.id&&!r.read);
     const lastIb=s.inbody&&s.inbody.length?s.inbody[s.inbody.length-1]:null;
-    const {reg,train,pickup}=getStudentClasses(s);
+    const {reg,train,pickup,subst}=getStudentClasses(s);
     const total=reg.length+train.length+(pickup?1:0);
     const cardId='sc-'+s.id;
     return `<div class="card" style="margin-bottom:9px">
