@@ -1858,7 +1858,8 @@ function renderStudentList(){
   const w=document.getElementById('student-list-wrap');
   if(!DB.students.length){w.innerHTML='<div class="empty-msg">등록된 학생이 없습니다</div>';return;}
   const sorted=[...DB.students].filter(s=>!s.inactive).sort((a,b)=>a.name.localeCompare(b.name,'ko'));
-  w.innerHTML=`<div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:7px;padding:0 2px">🎓 입시반 명단 · ${DB.students.filter(s=>!s.inactive).length}명</div>
+  const leaveCnt=sorted.filter(s=>s.onLeave).length;
+  w.innerHTML=`<div style="font-size:11px;font-weight:800;color:var(--gray);letter-spacing:.5px;margin-bottom:7px;padding:0 2px">🎓 입시반 명단 · ${sorted.length}명${leaveCnt?` (휴원 ${leaveCnt})`:''}</div>
   ${sorted.map((s,i)=>{
     const hasReq=DB.requests.some(r=>r.studentId===s.id&&!r.read);
     const lastIb=s.inbody&&s.inbody.length?s.inbody[s.inbody.length-1]:null;
@@ -1870,7 +1871,7 @@ function renderStudentList(){
         <div style="font-size:12px;color:var(--gray2);min-width:19px;font-weight:700;text-align:center">${i+1}</div>
         <div class="avatar" onclick="openStudentLock(${s.id})" style="cursor:pointer">${s.photo?`<img src="${s.photo}">`:`${s.name[0]}`}</div>
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openStudentLock(${s.id})">
-          <div style="font-size:16px;font-weight:800">${esc(s.name)}${hasReq?`<span class="alert-dot"></span>`:''}</div>
+          <div style="font-size:16px;font-weight:800">${esc(s.name)}${s.onLeave?` <span style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:800;vertical-align:middle">휴원</span>`:''}${hasReq?`<span class="alert-dot"></span>`:''}</div>
           <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-items:center">
             ${s.major?`<span class="badge pink">${esc(s.major)}</span>`:`<span class="badge gray">전공없음</span>`}
             ${lastIb?`<span class="badge green">📊 ${lastIb.score}점</span>`:''}
@@ -3039,7 +3040,7 @@ function renderAdmStudents(c){
     }
     // 이름/정보
     html+='<div style="flex:1;min-width:0;cursor:pointer" onclick="admViewStudent('+s.id+')">';
-    html+='<div style="font-weight:800;font-size:14px;'+(s.inactive?'color:var(--gray);text-decoration:line-through':'')+'">'+(s.inactive?'[퇴원] ':'')+esc(s.name)+'</div>';
+    html+='<div style="font-weight:800;font-size:14px;'+(s.inactive?'color:var(--gray);text-decoration:line-through':'')+'">'+(s.inactive?'[퇴원] ':'')+esc(s.name)+(!s.inactive&&s.onLeave?' <span style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:800;vertical-align:middle">휴원</span>':'')+'</div>';
     html+='<div style="font-size:11px;color:var(--gray)">'+esc(s.major||'전공없음')+' · '+esc(s.birth||'')+'</div>';
     if(pickupCls) html+='<div style="font-size:11px;color:var(--blue);margin-top:1px">🎯 픽업: '+esc(pickupCls.name)+(pickupCls.teacher?' · '+esc(pickupCls.teacher):'')+'</div>';
     html+='</div>';
@@ -3052,7 +3053,11 @@ function renderAdmStudents(c){
     html+='<button onclick="admViewStudent('+s.id+')" style="background:var(--pink-bg);border:1px solid #fbb6d8;color:var(--pink);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">개인</button>';
     html+='<button onclick="openTeacherMsg('+s.id+')" style="background:#f3e8ff;border:1px solid #d8b4fe;color:#7c3aed;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">💌</button>';
     html+='<button onclick="openPwM('+s.id+')" style="background:var(--light);border:1px solid var(--border);color:var(--gray);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">🔑</button>';
-    html+='<button onclick="toggleInactive('+s.id+')" style="background:'+(s.inactive?'#fef3c7':'#f1f5f9')+';border:1px solid '+(s.inactive?'#fde68a':'#cbd5e1')+';color:'+(s.inactive?'#92400e':'#64748b')+';border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit;margin-right:4px">'+(s.inactive?'🔓 복귀':'🔒 퇴원')+'</button>';
+    var _st=s.inactive?'out':(s.onLeave?'leave':'active');
+    html+='<select onchange="setStudentStatus('+s.id+',this.value,this)" style="background:'+(_st==='active'?'#f1f5f9':'#fef3c7')+';border:1px solid '+(_st==='active'?'#cbd5e1':'#fde68a')+';color:'+(_st==='active'?'#64748b':'#92400e')+';border-radius:6px;padding:4px 4px;font-size:11px;cursor:pointer;font-family:inherit;margin-right:4px">'+
+      '<option value="active"'+(_st==='active'?' selected':'')+'>재원</option>'+
+      '<option value="leave"'+(_st==='leave'?' selected':'')+'>휴원</option>'+
+      '<option value="out"'+(_st==='out'?' selected':'')+'>퇴원</option></select>';
     html+='<button class="del-btn" onclick="delStudent('+s.id+')">삭제</button>';
     html+='</div></div>';
 
@@ -3098,6 +3103,26 @@ function profileGoBack(){
   } else {
     showPage('page-main');
   }
+}
+
+async function setStudentStatus(sid,val,el){
+  var s=DB.students.find(function(x){return x.id===sid;});
+  if(!s) return;
+  var cur=s.inactive?'out':(s.onLeave?'leave':'active');
+  if(val===cur) return;
+  var msg={
+    active:s.name+'을(를) 재원으로 바꿀까요?',
+    leave:s.name+'을(를) 휴원 처리할까요?\n\n휴원생은 로그인과 기록이 그대로 유지되고, 명단에 "휴원"으로 표시돼요.\n시간검색에서는 빠져요.',
+    out:s.name+'을(를) 퇴원 처리할까요?\n\n퇴원 처리된 학생은 로그인이 차단됩니다.\n기록은 보존됩니다.'
+  }[val];
+  if(!confirm(msg)){ if(el) el.value=cur; return; }
+  s.inactive=(val==='out');
+  s.onLeave=(val==='leave');
+  save();
+  if(window.fb) window.fb.saveStudent(s);
+  showToast(val==='out'?'🔒 '+s.name+' 퇴원 처리됐어요':(val==='leave'?'⏸ '+s.name+' 휴원 처리됐어요':'✅ '+s.name+' 재원으로 바꿨어요'));
+  renderAdmContent();
+  if(window.renderStudentList) renderStudentList();
 }
 
 async function toggleInactive(sid){
@@ -3840,7 +3865,7 @@ function runAdmSearch(){
   }
 
   var results=[];
-  DB.students.filter(function(s){return !s.inactive;}).forEach(function(s){
+  DB.students.filter(function(s){return !s.inactive&&!s.onLeave;}).forEach(function(s){
     var slots=getStudentSlots(s);
     var conflict=hasConflict(slots, day, startMin, endMin);
     var match=(type==='free')?!conflict:conflict;
