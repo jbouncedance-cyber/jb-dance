@@ -196,7 +196,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
   import {
     getFirestore, doc, collection,
-    getDoc, getDocs, setDoc, deleteDoc, onSnapshot
+    getDoc, getDocs, setDoc, deleteDoc, onSnapshot, query, where
   } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
   import {
     getStorage, ref, uploadString, getDownloadURL, deleteObject
@@ -226,19 +226,63 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   // ══════════════════════════════════════
   // 저장 함수들 (쓰기만)
   // ══════════════════════════════════════
+  // ── 공개 카드 (3단계): 다른 학생에게 보여도 되는 정보만 따로 저장
+  const PUBLIC_COL = collection(db, 'jbdance_public');
+  function publicCard(s) {
+    const ib = (s.inbody && s.inbody.length) ? s.inbody[s.inbody.length - 1] : null;
+    return {
+      id: s.id, name: s.name || '', photo: s.photo || '', major: s.major || '',
+      inactive: !!s.inactive, onLeave: !!s.onLeave,
+      classes: s.classes || {},
+      pickupHistory: (s.pickupHistory || []).map(h => ({ month: h.month || '', classId: h.classId || null })),
+      lastInbody: ib ? { date: ib.date || '', score: (ib.score === undefined ? null : ib.score) } : null,
+      updatedAt: Date.now()
+    };
+  }
+  function canSaveStudent(s) {
+    if (!s) return false;
+    if (s._pub) { console.warn('공개 카드 데이터는 저장하지 않음:', s.name); return false; }
+    const me = window.__authAccount;
+    if (window.NEW_LOGIN && me && me.role !== 'admin' && String(me.sid) !== String(s.id)) {
+      console.warn('다른 학생 정보 저장 차단:', s.name); return false;
+    }
+    return true;
+  }
   async function saveStudent(s) {
+    if (!canSaveStudent(s)) return;
     try {
       await setDoc(doc(STUDENTS_COL, String(s.id)), s);
       console.log('✅ 학생 저장:', s.name);
     } catch(e) { console.warn('학생 저장 실패:', e); }
+    try { await setDoc(doc(PUBLIC_COL, String(s.id)), publicCard(s)); }
+    catch(e) { console.warn('공개 카드 저장 실패:', e); }
   }
 
   async function deleteStudent(id) {
     try { await deleteDoc(doc(STUDENTS_COL, String(id))); } 
     catch(e) { console.warn('학생 삭제 실패:', e); }
+    try { await deleteDoc(doc(PUBLIC_COL, String(id))); } catch(e) {}
+  }
+
+  // 관리자: 전체 학생의 공개 카드를 한 번에 맞추기
+  async function syncPublicCards() {
+    let n = 0;
+    for (const st of (window.DB.students || [])) {
+      if (st._pub) continue;
+      await setDoc(doc(PUBLIC_COL, String(st.id)), publicCard(st));
+      n++;
+    }
+    return n;
+  }
+  async function countPublicCards() {
+    const snap = await getDocs(PUBLIC_COL);
+    let n = 0; snap.forEach(() => n++);
+    return n;
   }
 
   async function saveConfig() {
+    const me = window.__authAccount;
+    if (window.NEW_LOGIN && (!me || me.role !== 'admin')) { console.warn('관리자만 설정을 저장할 수 있어요'); return; }
     try {
       await setDoc(CONFIG_REF, {
         adminPw: window.DB.adminPw || '1234',
@@ -276,7 +320,72 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   // ══════════════════════════════════════
   // 전체 로드 (앱 시작시 1회)
   // ══════════════════════════════════════
+  function hideLoadingOverlay() {
+    const ov = document.getElementById('loading-overlay');
+    if (ov) { ov.style.opacity='0'; ov.style.transition='opacity .3s'; setTimeout(()=>ov.remove(), 300); }
+  }
+
+  // 새 로그인: 로그인한 계정에 맞는 데이터만 불러오기
+  async function loadForAccount(acc) {
+    const D = window.DB;
+    window.__authAccount = acc;
+    const isAdm = acc.role === 'admin';
+    D.students = []; D.messages = []; D.requests = []; D.resources = [];
+    const cSnap = await getDoc(CONFIG_REF);
+    if (cSnap.exists()) {
+      const c = cSnap.data();
+      D.adminPw   = isAdm ? (c.adminPw || '') : '';
+      D.notice    = c.notice  || '';
+      D.notices   = c.notices || [];
+      D.events    = c.events  || [];
+      if (c.regularClasses && c.regularClasses.length) D.regularClasses = c.regularClasses;
+      if (c.trainingSlots  && c.trainingSlots.length)  D.trainingSlots  = c.trainingSlots;
+    }
+    if (isAdm) {
+      const sSnap = await getDocs(STUDENTS_COL);
+      sSnap.forEach(d => D.students.push(d.data()));
+      const rSnap = await getDocs(REQUESTS_COL);
+      rSnap.forEach(d => D.requests.push(d.data()));
+    } else {
+      const pSnap = await getDocs(PUBLIC_COL);
+      pSnap.forEach(d => {
+        const p = d.data();
+        if (String(p.id) === String(acc.sid)) return;
+        D.students.push({
+          id: p.id, name: p.name || '', photo: p.photo || '', major: p.major || '',
+          inactive: !!p.inactive, onLeave: !!p.onLeave,
+          classes: p.classes || {}, pickupHistory: p.pickupHistory || [],
+          inbody: p.lastInbody ? [p.lastInbody] : [], goals: {}, _pub: true
+        });
+      });
+      const own = await getStudent(acc.sid);
+      if (own) D.students.push(own);
+      const rSnap = await getDocs(query(REQUESTS_COL, where('studentId', '==', acc.sid)));
+      rSnap.forEach(d => D.requests.push(d.data()));
+    }
+    D.students.sort((a,b) => (a.name||'').localeCompare(b.name||'','ko'));
+    const mSnap = await getDocs(MESSAGES_COL);
+    mSnap.forEach(d => D.messages.push(d.data()));
+    D.messages.sort((a,b) => a.id.localeCompare(b.id));
+    try {
+      const resSnap = await getDocs(RESOURCES_COL);
+      resSnap.forEach(d => D.resources.push(d.data()));
+    } catch(e) {}
+    DB = window.DB;
+    startMessageSync(acc);
+    startResourceSync();
+  }
+  window.fb_loadFor = loadForAccount;
+
   async function loadAll() {
+    if (window.NEW_LOGIN) {
+      try { localStorage.removeItem('jbd4'); } catch(e) {}
+      window.DB.students = []; window.DB.adminPw = '';
+      initLoginPage();
+      await window.newLoginStart();
+      hideLoadingOverlay();
+      return;
+    }
     try {
       // config 로드
       const cSnap = await getDoc(CONFIG_REF);
@@ -359,7 +468,11 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   // 메시지만 실시간 동기화 (onSnapshot)
   // 학생/config는 onSnapshot 없음 → 덮어쓰기 방지
   // ══════════════════════════════════════
-  function startMessageSync() {
+  let _msgSyncStarted = false;
+  function startMessageSync(acc) {
+    if (_msgSyncStarted) return;
+    _msgSyncStarted = true;
+    const reqSource = (acc && acc.role !== 'admin') ? query(REQUESTS_COL, where('studentId', '==', acc.sid)) : REQUESTS_COL;
     onSnapshot(MESSAGES_COL, (snap) => {
       snap.docChanges().forEach(change => {
         const m = change.doc.data();
@@ -375,9 +488,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       DB = window.DB;
       const mainActive = document.getElementById('page-main')?.classList.contains('active');
       if (mainActive && window.renderMain) window.renderMain();
-    });
+    }, (e) => console.warn('메시지 동기화 오류:', e));
 
-    onSnapshot(REQUESTS_COL, (snap) => {
+    onSnapshot(reqSource, (snap) => {
       snap.docChanges().forEach(change => {
         const r = change.doc.data();
         if (change.type === 'removed') {
@@ -390,7 +503,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       });
       DB = window.DB;
       if (window.updAlertDot) window.updAlertDot();
-    });
+    }, (e) => console.warn('신청 동기화 오류:', e));
   }
 
   // ══════════════════════════════════════
@@ -408,7 +521,11 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     catch(e) { console.warn('resource 삭제 실패:', e); }
   }
 
-  // resources 실시간 동기화
+  // resources 실시간 동기화 (새 로그인에서는 로그인 후 시작)
+  let _resSyncStarted = false;
+  function startResourceSync() {
+  if (_resSyncStarted) return;
+  _resSyncStarted = true;
   onSnapshot(RESOURCES_COL, (snap) => {
     snap.docChanges().forEach(change => {
       const r = change.doc.data();
@@ -424,7 +541,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     DB = window.DB;
     const mainActive = document.getElementById('page-main')?.classList.contains('active');
     if (mainActive && window.renderMain) window.renderMain();
-  });
+  }, (e) => console.warn('영상/지식 동기화 오류:', e));
+  }
+  if (!window.NEW_LOGIN) startResourceSync();
 
   // ── Storage 함수 ──
   async function uploadPhoto(path, dataUrl) {
@@ -535,13 +654,13 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   async function authLogout(){ try{ await fbSignOut(mainAuth); }catch(_){} }
   window.fbAuth = { listAccounts, createAccount, loginIdToEmail, login:authLogin, current:authCurrent, logout:authLogout };
   window.fb_loadAll = loadAll;
-  window.fb = { saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest, saveResource, deleteResource, uploadPhoto, deletePhoto };
+  window.fb = { syncPublicCards, countPublicCards, saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest, saveResource, deleteResource, uploadPhoto, deletePhoto };
 
   // 앱 시작
   window.addEventListener('load', async () => {
     await new Promise(r => setTimeout(r, 200));
     await loadAll();
-    startMessageSync();
+    if (!window.NEW_LOGIN) startMessageSync();
   });
 </script>
 
@@ -1165,6 +1284,7 @@ window.DB = {
   messages:[]
 };
 function save(){
+  if(window.NEW_LOGIN) return; // 새 로그인에서는 기기에 전체 데이터를 남기지 않음
   localStorage.setItem('jbd4', JSON.stringify(window.DB));
 }
 
@@ -1286,7 +1406,10 @@ async function newLoginStart(){
   newLoginUI();
   try{
     var acc=window.fbAuth?await window.fbAuth.current():null;
-    if(acc&&enterWithAccount(acc)) return;
+    if(acc){
+      await window.fb_loadFor(acc);
+      if(enterWithAccount(acc)) return;
+    }
   }catch(e){console.warn('자동 로그인 확인 실패',e);}
   showPage('page-login');
 }
@@ -1294,18 +1417,25 @@ window.newLoginStart=newLoginStart;
 function enterWithAccount(acc){
   var err=document.getElementById('login-err');
   if(acc.role==='admin'){
-    authAccount=acc;isAdmin=true;curSid=null;
+    authAccount=acc;window.__authAccount=acc;isAdmin=true;curSid=null;
     renderMain();showPage('page-main');return true;
   }
   if(acc.role==='student'){
     var s=DB.students.find(function(x){return String(x.id)===String(acc.sid);});
-    if(!s){ if(err) err.textContent='학생 정보를 찾을 수 없어요. 선생님께 문의하세요.'; window.fbAuth.logout(); return false; }
-    if(s.inactive){ if(err) err.textContent='수강이 종료됐습니다. 선생님께 문의하세요.'; window.fbAuth.logout(); return false; }
-    authAccount=acc;isAdmin=false;curSid=s.id;
+    if(!s||s._pub){ newLoginReject('학생 정보를 찾을 수 없어요. 선생님께 문의하세요.'); return false; }
+    if(s.inactive){ newLoginReject('수강이 종료됐습니다. 선생님께 문의하세요.'); return false; }
+    authAccount=acc;window.__authAccount=acc;isAdmin=false;curSid=s.id;
     renderMain();showPage('page-main');return true;
   }
-  if(err) err.textContent='사용할 수 없는 계정이에요.';
-  window.fbAuth.logout();return false;
+  newLoginReject('사용할 수 없는 계정이에요.');return false;
+}
+function newLoginReject(msg){
+  var err=document.getElementById('login-err');
+  if(err) err.textContent=msg;
+  authAccount=null;window.__authAccount=null;
+  window.DB.students=[];window.DB.messages=[];window.DB.requests=[];window.DB.resources=[];
+  window.fbAuth.logout();
+  showPage('page-login');
 }
 var _loginBusy=false;
 async function doLoginNew(){
@@ -1320,6 +1450,7 @@ async function doLoginNew(){
   _loginBusy=true;err.textContent='확인 중…';
   try{
     var acc=await window.fbAuth.login(id,pw);
+    await window.fb_loadFor(acc);
     err.textContent='';
     if(enterWithAccount(acc)) document.getElementById('login-pw').value='';
   }catch(e){
@@ -1328,6 +1459,7 @@ async function doLoginNew(){
     else if(c==='no-account') err.textContent='등록되지 않은 계정이에요. 선생님께 문의하세요.';
     else if(c==='auth/too-many-requests') err.textContent='여러 번 틀려서 잠시 막혔어요. 조금 뒤에 다시 해주세요.';
     else if(c==='auth/network-request-failed') err.textContent='인터넷 연결을 확인해 주세요';
+    else if(c==='permission-denied') err.textContent='정보를 불러올 권한이 없어요. 선생님께 문의하세요.';
     else err.textContent='로그인 실패 ('+c+')';
   }
   _loginBusy=false;
@@ -1398,7 +1530,11 @@ function checkLoginSession(){
 
 function doLogout(){
   if(!confirm('로그아웃 하시겠습니까?')) return;
-  if(NEW_LOGIN&&window.fbAuth){ window.fbAuth.logout(); authAccount=null; }
+  if(NEW_LOGIN&&window.fbAuth){
+    authAccount=null;window.__authAccount=null;
+    window.fbAuth.logout().then(function(){ location.reload(); });
+    return;
+  }
   localStorage.removeItem('jbd_session');
   isAdmin=false;
   curSid=null;
@@ -1751,6 +1887,23 @@ function openMsgDetail(id){
   openM('modal-msg-detail');
 }
 
+function newLoginMsgUI(prefix){
+  // 새 로그인: 이름·비밀번호 대신 로그인한 계정으로 작성
+  var role=document.getElementById(prefix+'-role');
+  role.value=isAdmin?'teacher':'student';
+  role.closest('.form-row').style.display='none';
+  document.getElementById(prefix+'-pw').closest('.form-row').style.display='none';
+  document.getElementById(prefix+'-student-row').style.display='none';
+  document.getElementById(prefix+'-teacher-row').style.display=isAdmin?'block':'none';
+}
+function newLoginAuthor(prefix){
+  if(isAdmin){
+    var t=(document.getElementById(prefix+'-teacher-name').value||'').trim();
+    return t?{name:t,isTeacher:true,sid:null}:null;
+  }
+  var me=DB.students.find(function(x){return String(x.id)===String(curSid);});
+  return me?{name:me.name,isTeacher:false,sid:me.id}:null;
+}
 function openMsgModal(){
   document.getElementById('msg-role').value='student';
   updateMsgAuthorUI();
@@ -1760,6 +1913,7 @@ function openMsgModal(){
   document.getElementById('msg-content').value='';
   document.getElementById('msg-err').textContent='';
   if(document.getElementById('msg-teacher-name')) document.getElementById('msg-teacher-name').value='';
+  if(NEW_LOGIN) newLoginMsgUI('msg');
   openM('modal-msg');
 }
 function updateMsgAuthorUI(){
@@ -1779,8 +1933,12 @@ function submitMsg(){
   const content=document.getElementById('msg-content').value.trim();
   const errEl=document.getElementById('msg-err');
   if(!content){errEl.textContent='내용을 입력해주세요';return}
-  let authorName='';let isTeacher=false;
-  if(role==='teacher'){
+  let authorName='';let isTeacher=false;let authorSid=null;
+  if(NEW_LOGIN){
+    const a=newLoginAuthor('msg');
+    if(!a){errEl.textContent=isAdmin?'선생님 이름을 입력해주세요':'로그인 정보를 확인할 수 없어요';return}
+    authorName=a.name;isTeacher=a.isTeacher;authorSid=a.sid;
+  } else if(role==='teacher'){
     const tname=(document.getElementById('msg-teacher-name').value||'').trim();
     if(!tname){errEl.textContent='선생님 이름을 입력해주세요';return}
     if(!pw){errEl.textContent='비밀번호를 입력해주세요';return}
@@ -1798,6 +1956,7 @@ function submitMsg(){
   const now=new Date();
   const time=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   const newMsg={id:'msg'+Date.now(),author:authorName,isTeacher,content,time,replies:[]};
+  if(authorSid!==null) newMsg.authorSid=authorSid;
   DB.messages.push(newMsg);
   if(DB.messages.length>50) DB.messages=DB.messages.slice(-50);
   if(window.fb) window.fb.saveMessage(newMsg).then(()=>console.log('✅ 메시지 저장됨'));closeM('modal-msg');renderMsgBoard();
@@ -1813,6 +1972,7 @@ function openReplyModal(msgId){
   document.getElementById('reply-content').value='';
   document.getElementById('reply-err').textContent='';
   if(document.getElementById('reply-teacher-name')) document.getElementById('reply-teacher-name').value='';
+  if(NEW_LOGIN) newLoginMsgUI('reply');
   // 원글 미리보기
   const m=(DB.messages||[]).find(x=>x.id===msgId);
   if(m) document.getElementById('reply-orig').textContent=m.author+': '+m.content;
@@ -1826,8 +1986,12 @@ function submitReply(){
   const content=document.getElementById('reply-content').value.trim();
   const errEl=document.getElementById('reply-err');
   if(!content){errEl.textContent='내용을 입력해주세요';return}
-  let authorName='';let isTeacher=false;
-  if(role==='teacher'){
+  let authorName='';let isTeacher=false;let authorSid=null;
+  if(NEW_LOGIN){
+    const a=newLoginAuthor('reply');
+    if(!a){errEl.textContent=isAdmin?'선생님 이름을 입력해주세요':'로그인 정보를 확인할 수 없어요';return}
+    authorName=a.name;isTeacher=a.isTeacher;authorSid=a.sid;
+  } else if(role==='teacher'){
     const tname=(document.getElementById('reply-teacher-name').value||'').trim();
     if(!tname){errEl.textContent='선생님 이름을 입력해주세요';return}
     if(!pw){errEl.textContent='비밀번호를 입력해주세요';return}
@@ -1846,15 +2010,29 @@ function submitReply(){
   if(!m.replies) m.replies=[];
   const now=new Date();
   const time=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  m.replies.push({id:'rep'+Date.now(),author:authorName,isTeacher,content,time});
+  const newRep={id:'rep'+Date.now(),author:authorName,isTeacher,content,time};
+  if(authorSid!==null) newRep.authorSid=authorSid;
+  m.replies.push(newRep);
   if(window.fb) window.fb.saveMessage(m).then(()=>console.log('✅ 댓글 저장됨'));closeM('modal-reply');renderMsgBoard();
   // 댓글 달고 다시 상세 열기
   setTimeout(()=>openMsgDetail(currentMsgId),100);
 }
 
+function isMyPost(p){
+  if(!p||p.isTeacher) return false;
+  if(p.authorSid!==undefined&&p.authorSid!==null) return String(p.authorSid)===String(curSid);
+  var me=DB.students.find(function(x){return String(x.id)===String(curSid);});
+  return !!me&&p.author===me.name;
+}
 function confirmDelMsg(id, author, isTeacher){
   // 관리자는 바로 삭제
   if(isAdmin){
+    if(confirm('삭제하시겠습니까?')) delMsg(id);
+    return;
+  }
+  if(NEW_LOGIN){
+    var m=(DB.messages||[]).find(function(x){return x.id===id;});
+    if(!isMyPost(m)){alert('본인이 쓴 글만 삭제할 수 있어요');return;}
     if(confirm('삭제하시겠습니까?')) delMsg(id);
     return;
   }
@@ -1876,11 +2054,19 @@ function confirmDelMsg(id, author, isTeacher){
 }
 function delMsg(id){
   DB.messages=(DB.messages||[]).filter(x=>x.id!==id);
+  if(window.fb) window.fb.deleteMessage(id);
   save('message');closeM('modal-msg-detail');renderMsgBoard();
 }
 function confirmDelReply(msgId, repId, author, isTeacher){
   if(isAdmin){
     delReply(msgId, repId);
+    return;
+  }
+  if(NEW_LOGIN){
+    var pm=(DB.messages||[]).find(function(x){return x.id===msgId;});
+    var r=pm&&(pm.replies||[]).find(function(x){return x.id===repId;});
+    if(!isMyPost(r)){alert('본인이 쓴 댓글만 삭제할 수 있어요');return;}
+    if(confirm('삭제하시겠습니까?')) delReply(msgId, repId);
     return;
   }
   if(isTeacher){
@@ -1901,6 +2087,7 @@ function delReply(msgId,repId){
   const m=(DB.messages||[]).find(x=>x.id===msgId);
   if(!m) return;
   m.replies=(m.replies||[]).filter(x=>x.id!==repId);
+  if(window.fb) window.fb.saveMessage(m);
   save('message');openMsgDetail(msgId);
 }
 
@@ -4194,6 +4381,23 @@ function renderAcctCard(){
     <button class="btn btn-pink" style="margin-top:10px;width:100%" onclick="acctCreateStudents()" ${dis||(cnt.wait?'':'disabled')}>${acctState.busy?'만드는 중…':'학생 계정 '+cnt.wait+'개 만들기'}</button>
   </div></div>`;
 }
+async function refreshPubCardStatus(){
+  var el=document.getElementById('pub-card-status');
+  if(!el||!window.fb||!window.fb.countPublicCards) return;
+  try{
+    var n=await window.fb.countPublicCards();
+    var total=DB.students.filter(function(s){return !s._pub;}).length;
+    el.textContent='공개 카드 '+n+'개 · 전체 학생 '+total+'명'+(n>=total?' ✅':' — 맞추기가 필요해요');
+    el.style.color=n>=total?'var(--green,#16a34a)':'var(--pink)';
+  }catch(e){el.textContent='공개 카드 수를 불러오지 못했어요';}
+}
+async function syncPubCards(){
+  if(!window.fb||!window.fb.syncPublicCards) return;
+  showToast('⏳ 공개 카드 맞추는 중…');
+  try{var n=await window.fb.syncPublicCards();showToast('✅ 공개 카드 '+n+'개 맞췄어요');}
+  catch(e){alert('공개 카드 맞추기 실패: '+(e&&e.code||e));}
+  refreshPubCardStatus();
+}
 function downloadBackup(){
   try{
     var data=JSON.stringify({exportedAt:new Date().toISOString(),data:window.DB},null,2);
@@ -4218,6 +4422,14 @@ function renderAdmSettings(c){
   </div>
   ${renderAcctCard()}
   <div class="card" style="margin-top:10px">
+    <div class="card-head"><div class="card-title">🪪 학생 공개 카드</div></div>
+    <div class="card-body">
+      <div class="text-sm text-gray" style="line-height:1.6;margin-bottom:8px">다른 학생에게 보이는 카드(이름, 사진, 전공, 인바디 점수, 수업)만 따로 모아둔 곳이에요. 생년월일, 체중, 목표, 기록은 들어가지 않아요. 학생 정보를 저장할 때 자동으로 바뀌고, 처음 한 번은 아래 버튼으로 맞춰 주세요.</div>
+      <div id="pub-card-status" class="text-sm" style="margin-bottom:8px;font-weight:700"></div>
+      <button class="btn btn-outline" onclick="syncPubCards()">🔄 공개 카드 맞추기</button>
+    </div>
+  </div>
+  <div class="card" style="margin-top:10px">
     <div class="card-head"><div class="card-title">🔐 관리자 비밀번호 변경</div></div>
     <div class="card-body">
       <div class="form-row"><label class="form-label">현재 비밀번호</label><input type="password" id="cur-apw"></div>
@@ -4234,6 +4446,7 @@ function renderAdmSettings(c){
       <div class="text-sm text-gray" style="margin-top:5px">🤖 Android: Chrome → 메뉴(⋮) → 홈 화면에 추가</div>
     </div>
   </div>`;
+  refreshPubCardStatus();
 }
 function changeAdminPw(){
   const cur=document.getElementById('cur-apw').value,nw=document.getElementById('new-apw').value,nw2=document.getElementById('new-apw2').value;
