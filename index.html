@@ -740,7 +740,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     <div class="header-right">
       <button class="sbtn" id="refresh-btn" onclick="refreshData()" title="새로고침" style="font-size:16px">🔄</button>
       <button class="sbtn" onclick="showPage('page-schedule')">📅</button>
-      <button class="sbtn" onclick="goAdmin()">⚙️<span id="main-alert" style="display:none;color:var(--red)"> ●</span></button>
+      <button class="sbtn admin-only" onclick="goAdmin()">⚙️<span id="main-alert" style="display:none;color:var(--red)"> ●</span></button>
+      <button class="sbtn" onclick="doLogout()" style="font-size:11px;color:var(--gray)">로그아웃</button>
     </div>
   </div>
   <div class="content">
@@ -753,7 +754,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <div class="bottom-nav">
     <button class="nav-btn active" onclick="showPage('page-main')"><span class="nav-icon">🏠</span>명단</button>
     <button class="nav-btn" onclick="showPage('page-schedule')"><span class="nav-icon">📅</span>스케줄</button>
-    <button class="nav-btn" onclick="goAdmin()"><span class="nav-icon">⚙️</span>관리</button>
+    <button class="nav-btn admin-only" onclick="goAdmin()"><span class="nav-icon">⚙️</span>관리</button>
   </div>
 </div>
 
@@ -772,7 +773,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <div class="bottom-nav">
     <button class="nav-btn" onclick="showPage('page-main')"><span class="nav-icon">🏠</span>명단</button>
     <button class="nav-btn active" onclick="showPage('page-schedule')"><span class="nav-icon">📅</span>스케줄</button>
-    <button class="nav-btn" onclick="goAdmin()"><span class="nav-icon">⚙️</span>관리</button>
+    <button class="nav-btn admin-only" onclick="goAdmin()"><span class="nav-icon">⚙️</span>관리</button>
   </div>
 </div>
 
@@ -1571,6 +1572,8 @@ function doLogout(){
 }
 
 function renderMain(){
+  // 관리 버튼은 관리자에게만 표시
+  document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=isAdmin?'':'none';});
   renderNoticeBar();
   renderEventsBar();
   renderResourceBoard();
