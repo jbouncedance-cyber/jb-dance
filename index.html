@@ -2334,6 +2334,7 @@ function renderProfile(s){
         ${s.photo?`<img src="${s.photo}">`:`<span>${s.name[0]}</span>`}
         <div class="avatar-edit">📷</div>
       </div>
+      ${s.photo?`<button onclick="deleteProfilePhoto(${s.id})" style="background:none;border:none;color:var(--gray);font-size:11px;cursor:pointer;font-family:inherit;margin:-4px 0 6px;text-decoration:underline">사진 삭제</button>`:''}
       <div style="font-size:21px;font-weight:900;letter-spacing:-0.5px">${esc(s.name)}</div>
       <div style="font-size:12px;color:var(--gray);margin-top:3px">${s.birth}</div>
       <div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:8px;align-items:center">
@@ -4530,6 +4531,14 @@ function showToast(msg,duration=2500){
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function openM(id){document.getElementById(id).classList.add('active');}
 function closeM(id){document.getElementById(id).classList.remove('active');}
+async function deleteProfilePhoto(sid){
+  const s=DB.students.find(x=>x.id===sid);if(!s||!s.photo) return;
+  if(!confirm(s.name+' 프로필 사진을 삭제할까요?\n삭제하면 되돌릴 수 없어요.')) return;
+  if(window.fb&&window.fb.deletePhoto) await window.fb.deletePhoto('students/'+s.id+'/profile.jpg');
+  s.photo='';save();saveStudent(s);
+  showToast('🗑 사진을 삭제했어요');
+  renderProfile(s);renderStudentList();
+}
 function handleProfileImg(inp){
   const f=inp.files[0];if(!f) return;
   const r=new FileReader();
