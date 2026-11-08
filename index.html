@@ -1871,7 +1871,7 @@ function openMsgDetail(id){
             <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
               <span class="reply-author" style="color:${r.isTeacher?'var(--pink)':'var(--black)'}">${r.isTeacher?'👑 ':''}${esc(r.author)}</span>
               <span class="reply-time">${r.time}</span>
-              <button onclick="confirmDelReply('${id}','${r.id}','${r.author}',${r.isTeacher||false})" style="background:none;border:none;color:var(--gray2);cursor:pointer;font-size:14px;padding:0;margin-left:2px">×</button>
+              ${canDelPost(r)?`<button onclick="confirmDelReply('${id}','${r.id}','${r.author}',${r.isTeacher||false})" style="background:none;border:none;color:var(--gray2);cursor:pointer;font-size:14px;padding:0;margin-left:2px">×</button>`:''}
             </div>
             <div class="reply-content">${esc(r.content).replace(/\n/g,'<br>')}</div>
           </div>
@@ -1881,7 +1881,7 @@ function openMsgDetail(id){
     <div class="modal-foot" style="display:flex;gap:8px">
       <button class="btn btn-outline" onclick="closeM('modal-msg-detail')" style="flex:1;padding:11px;font-size:13px">닫기</button>
       <button class="btn btn-pink" onclick="openReplyModal('${id}')" style="flex:1;padding:11px;font-size:13px">💬 댓글 달기</button>
-      <button class="btn btn-gray" onclick="confirmDelMsg('${id}','${m.author}',${m.isTeacher||false})" style="flex:0 0 auto;padding:11px 14px;font-size:13px">삭제</button>
+      ${canDelPost(m)?`<button class="btn btn-gray" onclick="confirmDelMsg('${id}','${m.author}',${m.isTeacher||false})" style="flex:0 0 auto;padding:11px 14px;font-size:13px">삭제</button>`:''}
     </div>
   </div>`;
   openM('modal-msg-detail');
@@ -2018,6 +2018,8 @@ function submitReply(){
   setTimeout(()=>openMsgDetail(currentMsgId),100);
 }
 
+// 새 로그인: 삭제 버튼은 본인 글(관리자는 전체)에만 표시
+function canDelPost(p){ return !NEW_LOGIN||isAdmin||isMyPost(p); }
 function isMyPost(p){
   if(!p||p.isTeacher) return false;
   if(p.authorSid!==undefined&&p.authorSid!==null) return String(p.authorSid)===String(curSid);
