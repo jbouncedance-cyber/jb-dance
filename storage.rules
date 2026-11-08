@@ -1,0 +1,16 @@
+rules_version = '2';
+
+// JB DANCE 입시반 — Storage(사진) 보안 규칙
+// Firebase 콘솔 > Storage > 규칙 탭에 그대로 붙여넣고 [게시]
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 학생 프로필·인바디 결과지 사진: 로그인한 사람만, 10MB 이하 이미지만
+    match /students/{sid}/{fileName} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+                            && request.resource.size < 10 * 1024 * 1024
+                            && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+  }
+}

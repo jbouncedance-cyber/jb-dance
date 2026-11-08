@@ -202,7 +202,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     getStorage, ref, uploadString, getDownloadURL, deleteObject
   } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
   import {
-    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as fbSignOut
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as fbSignOut,
+    updatePassword, EmailAuthProvider, reauthenticateWithCredential
   } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 
   const firebaseConfig = {
@@ -285,7 +286,6 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     if (window.NEW_LOGIN && (!me || me.role !== 'admin')) { console.warn('관리자만 설정을 저장할 수 있어요'); return; }
     try {
       await setDoc(CONFIG_REF, {
-        adminPw: window.DB.adminPw || '1234',
         notice: window.DB.notice || '',
         notices: window.DB.notices || [],
         events: window.DB.events || [],
@@ -334,7 +334,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     const cSnap = await getDoc(CONFIG_REF);
     if (cSnap.exists()) {
       const c = cSnap.data();
-      D.adminPw   = isAdm ? (c.adminPw || '') : '';
+      D.adminPw   = '';
+      if (isAdm && c.adminPw !== undefined) D._legacyAdminPw = true;
       D.notice    = c.notice  || '';
       D.notices   = c.notices || [];
       D.events    = c.events  || [];
@@ -372,14 +373,31 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       resSnap.forEach(d => D.resources.push(d.data()));
     } catch(e) {}
     DB = window.DB;
+    if (isAdm) await cleanupLegacyPasswords();
     startMessageSync(acc);
     startResourceSync();
+  }
+
+  // 관리자 첫 로그인 때 한 번: 예전 관리자 비밀번호·학생 PIN을 서버에서 지움
+  async function cleanupLegacyPasswords() {
+    const D = window.DB;
+    try {
+      if (D._legacyAdminPw) { await saveConfig(); delete D._legacyAdminPw; console.log('✅ 예전 관리자 비밀번호 삭제'); }
+      let n = 0;
+      for (const st of D.students) {
+        if (st.pw === undefined) continue;
+        delete st.pw;
+        await setDoc(doc(STUDENTS_COL, String(st.id)), st);
+        n++;
+      }
+      if (n) console.log('✅ 예전 학생 비밀번호 삭제:', n);
+    } catch(e) { console.warn('예전 비밀번호 정리 실패:', e); }
   }
   window.fb_loadFor = loadForAccount;
 
   async function loadAll() {
     if (window.NEW_LOGIN) {
-      try { localStorage.removeItem('jbd4'); } catch(e) {}
+      try { localStorage.removeItem('jbd4'); localStorage.removeItem('jbd_session'); } catch(e) {}
       window.DB.students = []; window.DB.adminPw = '';
       initLoginPage();
       await window.newLoginStart();
@@ -652,7 +670,14 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     return await readAccount(u.uid);
   }
   async function authLogout(){ try{ await fbSignOut(mainAuth); }catch(_){} }
-  window.fbAuth = { listAccounts, createAccount, loginIdToEmail, login:authLogin, current:authCurrent, logout:authLogout };
+  // 로그인한 본인 비밀번호 변경 (현재 비밀번호로 한 번 더 확인)
+  async function authChangePassword(curPw, newPw){
+    const u = mainAuth.currentUser;
+    if(!u){ const e = new Error('no-user'); e.code = 'no-user'; throw e; }
+    await reauthenticateWithCredential(u, EmailAuthProvider.credential(u.email, curPw));
+    await updatePassword(u, newPw);
+  }
+  window.fbAuth = { listAccounts, createAccount, loginIdToEmail, login:authLogin, current:authCurrent, logout:authLogout, changePassword:authChangePassword };
   window.fb_loadAll = loadAll;
   window.fb = { syncPublicCards, countPublicCards, saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest, saveResource, deleteResource, uploadPhoto, deletePhoto };
 
@@ -1201,12 +1226,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 // DATA
 // ═══════════════════════════════════════════
 window.DB = {
-  adminPw:'1234', notice:'',
-  students:[
-    {id:1,name:'김민지',birth:'2005-03-12',major:'팝핑',pw:'1111',photo:'',classes:{},goals:{monthly:'',dancer:''},inbody:[],pickupHistory:[]},
-    {id:2,name:'이서연',birth:'2005-07-22',major:'락킹',pw:'2222',photo:'',classes:{},goals:{monthly:'',dancer:''},inbody:[],pickupHistory:[]},
-    {id:3,name:'박지우',birth:'2006-01-08',major:'',pw:'3333',photo:'',classes:{},goals:{monthly:'',dancer:''},inbody:[],pickupHistory:[]},
-  ],
+  adminPw:'', notice:'',
+  students:[],
   regularClasses:[
     {id:'r1',name:'팝핑기초',teacher:'여린',day:'월',timeStart:'19:00',timeEnd:'20:00'},
     {id:'r2',name:'팝핑',teacher:'여린',day:'월',timeStart:'20:00',timeEnd:'21:00'},
@@ -1391,8 +1412,8 @@ function initLoginPage(){
   });
 }
 
-// ── 새 로그인 (2단계 시험: 주소 끝에 ?login=1 을 붙였을 때만 작동) ──
-var NEW_LOGIN=/[?&]login=1(&|$)/.test(location.search);
+// ── 로그인: 아이디·비밀번호 (Firebase Authentication) ──
+var NEW_LOGIN=true;
 window.NEW_LOGIN=NEW_LOGIN;
 var authAccount=null;
 function newLoginUI(){
@@ -1410,7 +1431,14 @@ async function newLoginStart(){
       await window.fb_loadFor(acc);
       if(enterWithAccount(acc)) return;
     }
-  }catch(e){console.warn('자동 로그인 확인 실패',e);}
+  }catch(e){
+    console.warn('자동 로그인 확인 실패',e);
+    if(e&&e.code==='permission-denied'){
+      var er=document.getElementById('login-err');
+      if(er) er.textContent='수강이 종료됐거나 정보를 볼 수 없는 계정이에요. 선생님께 문의하세요.';
+      try{await window.fbAuth.logout();}catch(_){}
+    }
+  }
   showPage('page-login');
 }
 window.newLoginStart=newLoginStart;
@@ -1459,7 +1487,7 @@ async function doLoginNew(){
     else if(c==='no-account') err.textContent='등록되지 않은 계정이에요. 선생님께 문의하세요.';
     else if(c==='auth/too-many-requests') err.textContent='여러 번 틀려서 잠시 막혔어요. 조금 뒤에 다시 해주세요.';
     else if(c==='auth/network-request-failed') err.textContent='인터넷 연결을 확인해 주세요';
-    else if(c==='permission-denied') err.textContent='정보를 불러올 권한이 없어요. 선생님께 문의하세요.';
+    else if(c==='permission-denied'){ err.textContent='수강이 종료됐거나 정보를 볼 수 없는 계정이에요. 선생님께 문의하세요.'; try{await window.fbAuth.logout();}catch(_){} }
     else err.textContent='로그인 실패 ('+c+')';
   }
   _loginBusy=false;
@@ -1476,7 +1504,7 @@ function doLogin(){
   if(!pw){err.textContent='비밀번호를 입력해주세요';return;}
 
   if(sel==='__admin__'){
-    if(pw===DB.adminPw||pw==='7878'){
+    if(pw&&pw===DB.adminPw){
       saveLoginSession('__admin__', null);
       isAdmin=true;
       renderMain();
@@ -1491,7 +1519,7 @@ function doLogin(){
   var s=DB.students.find(function(x){return x.id===sid;});
   if(!s){err.textContent='학생 정보를 찾을 수 없습니다';return;}
   if(s.inactive){err.textContent='수강이 종료됐습니다. 선생님께 문의하세요.';return;}
-  if(pw!==s.pw&&pw!=='7878'){err.textContent='비밀번호가 틀렸습니다';return;}
+  if(!s.pw||pw!==s.pw){err.textContent='비밀번호가 틀렸습니다';return;}
 
   saveLoginSession('student', sid);
   curSid=sid;
@@ -2051,7 +2079,7 @@ function confirmDelMsg(id, author, isTeacher){
   if(pw===null) return;
   var s=DB.students.find(function(x){return x.name===author;});
   if(!s){alert('학생 정보를 찾을 수 없습니다');return;}
-  if(pw!==s.pw && pw!=='7878'){alert('비밀번호가 틀렸습니다');return;}
+  if(!s.pw||pw!==s.pw){alert('비밀번호가 틀렸습니다');return;}
   delMsg(id);
 }
 function delMsg(id){
@@ -2082,7 +2110,7 @@ function confirmDelReply(msgId, repId, author, isTeacher){
   if(pw===null) return;
   var s=DB.students.find(function(x){return x.name===author;});
   if(!s){alert('학생 정보를 찾을 수 없습니다');return;}
-  if(pw!==s.pw && pw!=='7878'){alert('비밀번호가 틀렸습니다');return;}
+  if(!s.pw||pw!==s.pw){alert('비밀번호가 틀렸습니다');return;}
   delReply(msgId, repId);
 }
 function delReply(msgId,repId){
@@ -2213,7 +2241,7 @@ function pinClr(){pinVal='';updPin();}
 function updPin(){for(let i=0;i<4;i++) document.getElementById('d'+i).classList.toggle('filled',i<pinVal.length);}
 function chkPin(){
   const s=DB.students.find(x=>x.id===curSid);
-  if(s&&(pinVal===s.pw||pinVal==='7878')){
+  if(s&&s.pw&&pinVal===s.pw){
     if(s.inactive){
       // 비활성화된 학생 - 접근 차단
       document.getElementById('pin-err').textContent='수강이 종료됐습니다. 선생님께 문의하세요.';
@@ -3253,7 +3281,7 @@ function delEv(id){if(!confirm('삭제하시겠습니까?')) return;DB.events=DB
 // ADMIN
 // ═══════════════════════════════════════════
 function goAdmin(){if(isAdmin){showPage('page-admin');return;}if(NEW_LOGIN){showToast('관리자 계정으로 로그인해야 해요');return;}document.getElementById('admin-pw-input').value='';document.getElementById('admin-pw-err').textContent='';showPage('page-admin-lock');}
-function checkAdminPw(){if(document.getElementById('admin-pw-input').value===DB.adminPw){isAdmin=true;showPage('page-admin');renderAdmContent();}else document.getElementById('admin-pw-err').textContent='비밀번호가 틀렸습니다';}
+function checkAdminPw(){if(!DB.adminPw) return;if(document.getElementById('admin-pw-input').value===DB.adminPw){isAdmin=true;showPage('page-admin');renderAdmContent();}else document.getElementById('admin-pw-err').textContent='비밀번호가 틀렸습니다';}
 function adminOut(){ doLogout(); }
 
 function admTab(btn,tab){admTab_=tab;document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderAdmContent();}
@@ -3337,7 +3365,6 @@ function renderAdmStudents(c){
     }
     html+='<button onclick="admViewStudent('+s.id+')" style="background:var(--pink-bg);border:1px solid #fbb6d8;color:var(--pink);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">개인</button>';
     html+='<button onclick="openTeacherMsg('+s.id+')" style="background:#f3e8ff;border:1px solid #d8b4fe;color:#7c3aed;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">💌</button>';
-    html+='<button onclick="openPwM('+s.id+')" style="background:var(--light);border:1px solid var(--border);color:var(--gray);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit">🔑</button>';
     var _st=s.inactive?'out':(s.onLeave?'leave':'active');
     html+='<select onchange="setStudentStatus('+s.id+',this.value,this)" style="background:'+(_st==='active'?'#f1f5f9':'#fef3c7')+';border:1px solid '+(_st==='active'?'#cbd5e1':'#fde68a')+';color:'+(_st==='active'?'#64748b':'#92400e')+';border-radius:6px;padding:4px 4px;font-size:11px;cursor:pointer;font-family:inherit;margin-right:4px">'+
       '<option value="active"'+(_st==='active'?' selected':'')+'>재원</option>'+
@@ -3869,6 +3896,13 @@ function openResourceDetail(id){
   document.getElementById('res-comment-input').value='';
   document.getElementById('res-comment-role').value='student';
   updateResCommentUI();
+  if(NEW_LOGIN){
+    var roleSel=document.getElementById('res-comment-role');
+    roleSel.value=isAdmin?'teacher':'student';
+    roleSel.parentElement.style.display='none';
+    document.getElementById('res-comment-pw').style.display='none';
+    document.getElementById('res-comment-teacher-row').style.display=isAdmin?'block':'none';
+  }
   renderResourceDetailBody(r);
   openM('modal-resource-detail');
 }
@@ -3903,7 +3937,7 @@ function renderResourceDetailBody(r){
       parts.push('<span style="font-size:12px;font-weight:800;color:'+(c.isTeacher?'var(--pink)':'var(--black)')+'">'+(c.isTeacher?'👑 ':'')+esc(c.author)+'</span>');
       parts.push('<div style="display:flex;align-items:center;gap:6px">');
       parts.push('<span style="font-size:10px;color:var(--gray)">'+c.time+'</span>');
-      if(isAdmin){
+      if(isAdmin||(NEW_LOGIN&&isMyPost(c))){
         parts.push('<button class="del-res-comment" data-rid="'+r.id+'" data-cid="'+c.id+'" style="background:none;border:none;color:var(--gray2);cursor:pointer;font-size:13px">×</button>');
       }
       parts.push('</div></div>');
@@ -3927,8 +3961,12 @@ function submitResourceComment(){
   var pw=document.getElementById('res-comment-pw').value;
   var content=document.getElementById('res-comment-input').value.trim();
   if(!content){alert('댓글 내용을 입력해주세요');return;}
-  var authorName='';var isTeacher=false;
-  if(role==='teacher'){
+  var authorName='';var isTeacher=false;var authorSid=null;
+  if(NEW_LOGIN){
+    var a=newLoginAuthor('res-comment');
+    if(!a){alert(isAdmin?'선생님 이름을 입력해주세요':'로그인 정보를 확인할 수 없어요');return;}
+    authorName=a.name;isTeacher=a.isTeacher;authorSid=a.sid;
+  } else if(role==='teacher'){
     var tname=(document.getElementById('res-comment-teacher-name').value||'').trim();
     if(!tname){alert('이름을 입력해주세요');return;}
     if(pw!==DB.adminPw){alert('관리자 비밀번호가 틀렸습니다');return;}
@@ -3943,7 +3981,9 @@ function submitResourceComment(){
   if(!r.comments) r.comments=[];
   var now=new Date();
   var time=(now.getMonth()+1)+'/'+now.getDate()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-  r.comments.push({id:'rc'+Date.now(),author:authorName,isTeacher:isTeacher,content:content,time:time});
+  var newCom={id:'rc'+Date.now(),author:authorName,isTeacher:isTeacher,content:content,time:time};
+  if(authorSid!==null) newCom.authorSid=authorSid;
+  r.comments.push(newCom);
   if(window.fb) window.fb.saveResource(r);
   document.getElementById('res-comment-input').value='';
   document.getElementById('res-comment-pw').value='';
@@ -3954,6 +3994,11 @@ function submitResourceComment(){
 function delResourceComment(resId,comId){
   var r=(DB.resources||[]).find(function(x){return x.id===resId;});
   if(!r) return;
+  if(!isAdmin){
+    var c=(r.comments||[]).find(function(x){return x.id===comId;});
+    if(!isMyPost(c)){alert('본인이 쓴 댓글만 삭제할 수 있어요');return;}
+    if(!confirm('삭제하시겠습니까?')) return;
+  }
   r.comments=(r.comments||[]).filter(function(c){return c.id!==comId;});
   if(window.fb) window.fb.saveResource(r);
   renderResourceDetailBody(r);
@@ -4350,7 +4395,7 @@ function renderAcctCard(){
   };
   var dis=acctState.busy?'disabled':'';
   return `<div class="card">${head}<div class="card-body">
-    <div class="text-sm text-gray" style="line-height:1.6;margin-bottom:10px">새 로그인에 쓸 계정을 미리 만드는 곳이에요. 만들어도 <b>지금 로그인 방식은 그대로</b>예요.<br>학생 아이디 = 이름 이니셜 + 생년월일 6자리 · 비밀번호 = 생년월일 6자리</div>
+    <div class="text-sm text-gray" style="line-height:1.6;margin-bottom:10px">학생과 관리자가 로그인할 계정이에요. <b>새 학생을 추가하면 여기서 꼭 계정을 만들어 주세요.</b> 계정이 없으면 로그인할 수 없어요.<br>학생 아이디 = 이름 이니셜 + 생년월일 6자리 · 비밀번호 = 생년월일 6자리</div>
 
     <div style="font-size:13px;font-weight:800;margin:4px 0 6px">관리자 계정</div>
     ${admin?`<div style="display:flex;align-items:center;gap:8px;font-size:14px"><b>admin</b><span class="badge green">만듦</span></div>`:
@@ -4418,7 +4463,7 @@ function renderAdmSettings(c){
   c.innerHTML=`<div class="card" style="margin-bottom:10px">
     <div class="card-head"><div class="card-title">💾 전체 데이터 백업</div></div>
     <div class="card-body">
-      <div class="text-sm text-gray" style="margin-bottom:8px;line-height:1.6">학생 정보, 공지, 수업, 메시지를 파일 하나로 받아요. 데이터를 읽기만 해서 기존 정보는 바뀌지 않아요.<br><b>학생 비밀번호가 함께 들어 있으니</b> 다른 사람에게 보내지 말고 안전한 곳에 보관해 주세요.</div>
+      <div class="text-sm text-gray" style="margin-bottom:8px;line-height:1.6">학생 정보, 공지, 수업, 메시지를 파일 하나로 받아요. 데이터를 읽기만 해서 기존 정보는 바뀌지 않아요.<br><b>학생 개인정보가 들어 있으니</b> 다른 사람에게 보내지 말고 안전한 곳에 보관해 주세요.</div>
       <button class="btn btn-outline" onclick="downloadBackup()">💾 백업 받기</button>
     </div>
   </div>
@@ -4432,8 +4477,9 @@ function renderAdmSettings(c){
     </div>
   </div>
   <div class="card" style="margin-top:10px">
-    <div class="card-head"><div class="card-title">🔐 관리자 비밀번호 변경</div></div>
+    <div class="card-head"><div class="card-title">🔐 관리자(admin) 비밀번호 변경</div></div>
     <div class="card-body">
+      <div class="text-sm text-gray" style="margin-bottom:8px">새 비밀번호는 6자 이상이에요. 앱에 저장되지 않으니 꼭 따로 적어두세요.</div>
       <div class="form-row"><label class="form-label">현재 비밀번호</label><input type="password" id="cur-apw"></div>
       <div class="form-row"><label class="form-label">새 비밀번호</label><input type="password" id="new-apw"></div>
       <div class="form-row"><label class="form-label">새 비밀번호 확인</label><input type="password" id="new-apw2"></div>
@@ -4450,11 +4496,21 @@ function renderAdmSettings(c){
   </div>`;
   refreshPubCardStatus();
 }
-function changeAdminPw(){
+async function changeAdminPw(){
   const cur=document.getElementById('cur-apw').value,nw=document.getElementById('new-apw').value,nw2=document.getElementById('new-apw2').value;
-  if(cur!==DB.adminPw){alert('현재 비밀번호가 틀렸습니다');return}
-  if(!nw||nw!==nw2){alert('새 비밀번호를 확인해주세요');return}
-  DB.adminPw=nw;saveConfig();alert('비밀번호 변경 완료!');
+  if(!cur){alert('현재 비밀번호를 입력해주세요');return}
+  if(!nw||nw.length<6){alert('새 비밀번호는 6자 이상이어야 해요');return}
+  if(nw!==nw2){alert('새 비밀번호 확인이 달라요');return}
+  try{
+    await window.fbAuth.changePassword(cur,nw);
+    ['cur-apw','new-apw','new-apw2'].forEach(function(i){document.getElementById(i).value='';});
+    alert('비밀번호 변경 완료! 새 비밀번호를 꼭 적어두세요.');
+  }catch(e){
+    var c=e&&e.code||'';
+    if(c==='auth/invalid-credential'||c==='auth/wrong-password') alert('현재 비밀번호가 틀렸어요');
+    else if(c==='auth/weak-password') alert('새 비밀번호가 너무 짧아요 (6자 이상)');
+    else alert('변경 실패 ('+c+')');
+  }
 }
 
 // ═══════════════════════════════════════════

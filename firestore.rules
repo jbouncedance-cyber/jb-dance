@@ -1,0 +1,75 @@
+rules_version = '2';
+
+// JB DANCE 입시반 — Firestore 보안 규칙
+// Firebase 콘솔 > Firestore Database > 규칙 탭에 그대로 붙여넣고 [게시]
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function acctPath() { return /databases/$(database)/documents/jbdance_accounts/$(request.auth.uid); }
+    function hasAcct() { return signedIn() && exists(acctPath()); }
+    function acct() { return get(acctPath()).data; }
+    function isAdmin() { return hasAcct() && acct().role == 'admin'; }
+    function isStudent() { return hasAcct() && acct().role == 'student'; }
+    function mySid() { return acct().sid; }
+    function myStudent() { return get(/databases/$(database)/documents/jbdance_students/$(string(mySid()))).data; }
+    // 재원·휴원 학생만 (퇴원생은 로그인해도 아무것도 못 봄)
+    function activeStudent() { return isStudent() && myStudent().get('inactive', false) != true; }
+    function isMe(id) { return activeStudent() && string(mySid()) == id; }
+    function myPost(p) {
+      return p.get('isTeacher', false) != true && (
+        p.get('authorSid', null) == mySid() ||
+        (p.get('authorSid', null) == null && p.get('author', '') == myStudent().name)
+      );
+    }
+
+    // 로그인 계정: 본인 것만 읽기, 만들기는 관리자만
+    match /jbdance_accounts/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow write: if isAdmin();
+    }
+
+    // 공지·행사·수업 목록
+    match /jbdance/{docId} {
+      allow read: if isAdmin() || activeStudent();
+      allow write: if isAdmin();
+    }
+
+    // 학생 전체 정보: 본인과 관리자만
+    match /jbdance_students/{id} {
+      allow read: if isAdmin() || isMe(id);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (isMe(id) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['id', 'name', 'inactive', 'onLeave']));
+    }
+
+    // 공개 카드: 로그인한 학생 모두 읽기, 본인 카드만 쓰기
+    match /jbdance_public/{id} {
+      allow read: if isAdmin() || activeStudent();
+      allow write: if isAdmin() || isMe(id);
+    }
+
+    // 오늘의 한마디
+    match /jbdance_messages/{id} {
+      allow read, create, update: if isAdmin() || activeStudent();
+      allow delete: if isAdmin() || (activeStudent() && myPost(resource.data));
+    }
+
+    // 수업 변경 신청·질문: 본인 것만
+    match /jbdance_requests/{id} {
+      allow read: if isAdmin() || (activeStudent() && resource.data.studentId == mySid());
+      allow create: if isAdmin() || (activeStudent() && request.resource.data.studentId == mySid());
+      allow update: if isAdmin() || (activeStudent() && resource.data.studentId == mySid()
+                                     && request.resource.data.studentId == mySid());
+      allow delete: if isAdmin();
+    }
+
+    // 영상/지식: 학생은 댓글만
+    match /jbdance_resources/{id} {
+      allow read: if isAdmin() || activeStudent();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (activeStudent() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']));
+    }
+  }
+}
