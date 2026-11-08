@@ -201,6 +201,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   import {
     getStorage, ref, uploadString, getDownloadURL, deleteObject
   } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as fbSignOut
+  } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyD90xFKykO14-bnVo0eze70R-iBxnDhzZM",
@@ -455,6 +458,61 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     }catch(e){console.warn('getStudent err:',e);return null;}
   }
   window.fb_getStudent=getStudent;
+
+  // ══════════════════════════════════════
+  // 로그인 계정 (Firebase Authentication)
+  // 계정 문서: jbdance_accounts/{uid} = {uid, loginId, role, sid, createdAt}
+  // 비밀번호는 Firebase Authentication에만 저장되고 앱 데이터에는 남지 않음
+  // ══════════════════════════════════════
+  const ACCOUNTS_COL = collection(db, 'jbdance_accounts');
+  const LOGIN_EMAIL_DOMAIN = '@jbdance-ipsi.app';
+  let _creatorApp = null;
+
+  function loginIdToEmail(loginId){ return String(loginId).trim().toLowerCase() + LOGIN_EMAIL_DOMAIN; }
+
+  async function listAccounts(){
+    const snap = await getDocs(ACCOUNTS_COL);
+    const arr = [];
+    snap.forEach(d => arr.push(d.data()));
+    return arr;
+  }
+
+  // 관리자 로그인 상태를 바꾸지 않도록 별도 앱 인스턴스로 계정을 만듦
+  async function createAccount(loginId, pw, role, sid){
+    if(!_creatorApp) _creatorApp = initializeApp(firebaseConfig, 'account-creator');
+    const cAuth = getAuth(_creatorApp);
+    const email = loginIdToEmail(loginId);
+    let uid = null;
+    try {
+      const cred = await createUserWithEmailAndPassword(cAuth, email, pw);
+      uid = cred.user.uid;
+    } catch(e) {
+      if(e && e.code === 'auth/email-already-in-use'){
+        // 이전 시도에서 계정만 만들어지고 기록이 빠진 경우: 같은 비밀번호면 기록만 다시 저장
+        try {
+          const cred2 = await signInWithEmailAndPassword(cAuth, email, pw);
+          uid = cred2.user.uid;
+        } catch(e2) {
+          try { await fbSignOut(cAuth); } catch(_){}
+          return { ok:false, code:'exists-other-pw' };
+        }
+      } else {
+        try { await fbSignOut(cAuth); } catch(_){}
+        return { ok:false, code:(e && e.code) || String(e) };
+      }
+    }
+    try { await fbSignOut(cAuth); } catch(_){}
+    try {
+      await setDoc(doc(ACCOUNTS_COL, uid), {
+        uid, loginId:String(loginId).trim().toLowerCase(), role,
+        sid:(sid===undefined||sid===null)?null:sid, createdAt:Date.now()
+      });
+    } catch(e) {
+      return { ok:false, code:'record-failed' };
+    }
+    return { ok:true, uid };
+  }
+  window.fbAuth = { listAccounts, createAccount, loginIdToEmail };
   window.fb_loadAll = loadAll;
   window.fb = { saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest, saveResource, deleteResource, uploadPhoto, deletePhoto };
 
@@ -3839,8 +3897,187 @@ function runAdmSearch(){
   document.getElementById('srch-result').innerHTML=html;
 }
 
+// ═══════════════════════════════════════════
+// 로그인 계정 관리 (1단계: 계정 미리 만들기)
+// ═══════════════════════════════════════════
+var ACCT_CHO=['k','k','n','d','d','r','m','b','b','s','s','','j','j','c','k','t','p','h'];
+var ACCT_JUNG=['a','a','y','y','e','e','y','y','o','w','w','o','y','u','w','w','w','y','e','u','i'];
+var ACCT_SURNAME={'이':'l','임':'l'};
+var acctState={loaded:false,loading:false,error:'',accounts:[],idEdits:{},busy:false,results:{}};
+
+function acctInitial(ch,isFirst){
+  if(isFirst&&ACCT_SURNAME[ch]) return ACCT_SURNAME[ch];
+  var code=ch.charCodeAt(0);
+  if(code>=0xAC00&&code<=0xD7A3){
+    var o=code-0xAC00,cho=Math.floor(o/588),jung=Math.floor((o%588)/28);
+    return ACCT_CHO[cho]||ACCT_JUNG[jung]||'';
+  }
+  if(/[a-zA-Z]/.test(ch)) return ch.toLowerCase();
+  return '';
+}
+function acctBirth6(birth){
+  var d=String(birth||'').replace(/\D/g,'');
+  if(d.length===8) d=d.slice(2);
+  if(d.length!==6) return '';
+  var m=parseInt(d.slice(2,4),10),dd=parseInt(d.slice(4,6),10);
+  if(m<1||m>12||dd<1||dd>31) return '';
+  return d;
+}
+function acctBaseId(s){
+  var name=String(s.name||'').replace(/\s/g,''),ini='';
+  for(var i=0;i<name.length;i++) ini+=acctInitial(name[i],i===0);
+  var b=acctBirth6(s.birth);
+  return (ini&&b)?ini+b:'';
+}
+// 학생별 계정 상태 계산 (아이디 중복 시 뒤에 숫자)
+function acctRows(){
+  var accts=acctState.accounts;
+  var bySid={};accts.forEach(function(a){if(a.role==='student'&&a.sid!=null) bySid[String(a.sid)]=a;});
+  var taken={};accts.forEach(function(a){taken[a.loginId]=String(a.sid);});
+  var studs=DB.students.filter(function(s){return !s.inactive;}).sort(function(a,b){return a.name.localeCompare(b.name,'ko');});
+  return studs.map(function(s){
+    var acc=bySid[String(s.id)];
+    var pw=acctBirth6(s.birth);
+    if(acc) return {s:s,status:'done',id:acc.loginId,pw:pw};
+    if(!pw) return {s:s,status:'nobirth',id:'',pw:''};
+    var id=acctState.idEdits[s.id]!==undefined?acctState.idEdits[s.id]:acctBaseId(s);
+    if(acctState.idEdits[s.id]===undefined){
+      var base=id,n=2;
+      while(taken[id]!==undefined&&taken[id]!==String(s.id)){id=base+n;n++;}
+    }
+    var bad=!/^[a-z0-9]{3,20}$/.test(id)||(taken[id]!==undefined&&taken[id]!==String(s.id));
+    taken[id]=String(s.id);
+    var r=acctState.results[s.id];
+    return {s:s,status:bad?'badid':(r&&!r.ok?'fail':'wait'),id:id,pw:pw,err:r&&!r.ok?r.code:''};
+  });
+}
+async function acctLoad(){
+  if(!window.fbAuth){acctState.error='로그인 기능을 불러오지 못했어요. 새로고침해 주세요.';return;}
+  acctState.loading=true;
+  try{acctState.accounts=await window.fbAuth.listAccounts();acctState.loaded=true;acctState.error='';}
+  catch(e){acctState.error='계정 목록을 불러오지 못했어요 ('+(e&&e.code||e)+')';}
+  acctState.loading=false;
+  if(isAdmin&&admTab_==='settings') renderAdmContent();
+}
+function acctErrText(code){
+  if(code==='exists-other-pw') return '같은 아이디가 이미 있어요';
+  if(code==='auth/operation-not-allowed') return 'Firebase에서 이메일/비밀번호 로그인이 꺼져 있어요';
+  if(code==='auth/weak-password') return '비밀번호가 6자보다 짧아요';
+  if(code==='auth/network-request-failed') return '인터넷 연결을 확인해 주세요';
+  if(code==='auth/too-many-requests') return '잠시 후 다시 시도해 주세요';
+  if(code==='record-failed') return '계정은 만들었지만 기록 저장 실패 — 다시 누르면 이어서 저장해요';
+  return '실패 ('+code+')';
+}
+function acctEditId(sid,v){
+  acctState.idEdits[sid]=String(v||'').trim().toLowerCase();
+  renderAdmContent();
+}
+async function acctCreateStudents(){
+  if(acctState.busy) return;
+  var rows=acctRows().filter(function(r){return r.status==='wait'||r.status==='fail';});
+  if(!rows.length){showToast('만들 계정이 없어요');return;}
+  if(!confirm('학생 계정 '+rows.length+'개를 만들까요?\n표의 아이디와 비밀번호를 한 번 더 확인해 주세요.')) return;
+  acctState.busy=true;renderAdmContent();
+  var ok=0,fail=0;
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i];
+    showToast('⏳ 계정 만드는 중 '+(i+1)+'/'+rows.length);
+    var res=await window.fbAuth.createAccount(r.id,r.pw,'student',r.s.id);
+    acctState.results[r.s.id]=res;
+    if(res.ok){ok++;acctState.accounts.push({uid:res.uid,loginId:r.id,role:'student',sid:r.s.id});}
+    else fail++;
+  }
+  acctState.busy=false;
+  showToast(fail?('✅ '+ok+'개 완료 · ❌ '+fail+'개 실패'):('✅ 학생 계정 '+ok+'개 완료'),3500);
+  renderAdmContent();
+}
+async function acctCreateAdmin(){
+  if(acctState.busy) return;
+  var pw=document.getElementById('acct-admin-pw').value,pw2=document.getElementById('acct-admin-pw2').value;
+  if(!pw||pw.length<6){alert('비밀번호는 6자 이상이어야 해요');return;}
+  if(pw!==pw2){alert('비밀번호 확인이 달라요');return;}
+  acctState.busy=true;renderAdmContent();
+  var res=await window.fbAuth.createAccount('admin',pw,'admin',null);
+  acctState.busy=false;
+  if(res.ok){acctState.accounts.push({uid:res.uid,loginId:'admin',role:'admin',sid:null});showToast('✅ 관리자 계정 완료');}
+  else alert('관리자 계정 만들기 실패: '+acctErrText(res.code));
+  renderAdmContent();
+}
+function renderAcctCard(){
+  if(!acctState.loaded&&!acctState.loading&&!acctState.error){acctLoad();}
+  var head=`<div class="card-head"><div class="card-title">👤 로그인 계정 관리</div></div>`;
+  if(acctState.error) return `<div class="card">${head}<div class="card-body"><div style="color:var(--pink);font-size:13px">${esc(acctState.error)}</div><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="acctState.error='';acctLoad()">다시 시도</button></div></div>`;
+  if(!acctState.loaded) return `<div class="card">${head}<div class="card-body text-sm text-gray">계정 목록 불러오는 중…</div></div>`;
+  var admin=acctState.accounts.find(function(a){return a.role==='admin';});
+  var rows=acctRows();
+  var cnt={done:0,wait:0,nobirth:0,bad:0};
+  rows.forEach(function(r){if(r.status==='done')cnt.done++;else if(r.status==='nobirth')cnt.nobirth++;else if(r.status==='badid')cnt.bad++;else cnt.wait++;});
+  var badge=function(r){
+    if(r.status==='done') return '<span class="badge green">만듦</span>';
+    if(r.status==='nobirth') return '<span class="badge gray">생년월일 필요</span>';
+    if(r.status==='badid') return '<span class="badge pink">아이디 확인</span>';
+    if(r.status==='fail') return '<span class="badge pink" title="'+esc(acctErrText(r.err))+'">실패</span>';
+    return '<span class="badge gray">대기</span>';
+  };
+  var dis=acctState.busy?'disabled':'';
+  return `<div class="card">${head}<div class="card-body">
+    <div class="text-sm text-gray" style="line-height:1.6;margin-bottom:10px">새 로그인에 쓸 계정을 미리 만드는 곳이에요. 만들어도 <b>지금 로그인 방식은 그대로</b>예요.<br>학생 아이디 = 이름 이니셜 + 생년월일 6자리 · 비밀번호 = 생년월일 6자리</div>
+
+    <div style="font-size:13px;font-weight:800;margin:4px 0 6px">관리자 계정</div>
+    ${admin?`<div style="display:flex;align-items:center;gap:8px;font-size:14px"><b>admin</b><span class="badge green">만듦</span></div>`:
+    `<div class="text-sm text-gray" style="margin-bottom:6px">아이디는 <b>admin</b>이에요. 비밀번호는 앱에 저장되지 않으니 꼭 따로 적어두세요.</div>
+    <div class="form-row"><input type="password" id="acct-admin-pw" placeholder="비밀번호 (6자 이상)" ${dis}></div>
+    <div class="form-row"><input type="password" id="acct-admin-pw2" placeholder="비밀번호 확인" ${dis}></div>
+    <button class="btn btn-pink btn-sm" onclick="acctCreateAdmin()" ${dis}>관리자 계정 만들기</button>`}
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 6px">
+      <div style="font-size:13px;font-weight:800">학생 계정</div>
+      <div class="text-sm text-gray">만듦 ${cnt.done} · 대기 ${cnt.wait}${cnt.nobirth?' · 생년월일 필요 '+cnt.nobirth:''}${cnt.bad?' · 아이디 확인 '+cnt.bad:''}</div>
+    </div>
+    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:330px">
+      <thead><tr style="background:var(--bg2,#f6f6f6);text-align:left;white-space:nowrap">
+        <th style="padding:7px 8px">이름</th><th style="padding:7px 8px">아이디</th><th style="padding:7px 8px">비밀번호</th><th style="padding:7px 8px">상태</th></tr></thead>
+      <tbody>${rows.map(function(r){
+        var idCell=(r.status==='done'||r.status==='nobirth')?esc(r.id||'—'):
+          `<input value="${esc(r.id)}" onchange="acctEditId(${r.s.id},this.value)" ${dis} style="width:104px;padding:4px 6px;font-size:13px;font-family:inherit;border:1px solid var(--border);border-radius:6px">`;
+        return `<tr style="border-top:1px solid var(--border)">
+          <td style="padding:7px 8px;font-weight:700;white-space:nowrap">${esc(r.s.name)}</td>
+          <td style="padding:7px 8px">${idCell}</td>
+          <td style="padding:7px 8px">${esc(r.pw||'—')}</td>
+          <td style="padding:7px 8px;white-space:nowrap">${badge(r)}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+    ${cnt.nobirth?`<div class="text-sm text-gray" style="margin-top:6px">생년월일이 없는 학생은 학생 정보에 생년월일을 넣으면 "대기"로 바뀌어요.</div>`:''}
+    ${cnt.bad?`<div class="text-sm" style="margin-top:6px;color:var(--pink)">"아이디 확인" 학생은 영문 소문자·숫자 3~20자로, 다른 학생과 겹치지 않게 고쳐 주세요.</div>`:''}
+    <div class="text-sm text-gray" style="margin-top:6px">아이디 칸은 눌러서 고칠 수 있어요. 퇴원 처리된 학생은 목록에 나오지 않아요.</div>
+    <button class="btn btn-pink" style="margin-top:10px;width:100%" onclick="acctCreateStudents()" ${dis||(cnt.wait?'':'disabled')}>${acctState.busy?'만드는 중…':'학생 계정 '+cnt.wait+'개 만들기'}</button>
+  </div></div>`;
+}
+function downloadBackup(){
+  try{
+    var data=JSON.stringify({exportedAt:new Date().toISOString(),data:window.DB},null,2);
+    var blob=new Blob([data],{type:'application/json'});
+    var a=document.createElement('a');
+    var d=new Date(),p=function(n){return String(n).padStart(2,'0');};
+    a.href=URL.createObjectURL(blob);
+    a.download='JB_DANCE_backup_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+'.json';
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},500);
+    showToast('✅ 백업 파일을 받았어요');
+  }catch(e){alert('백업 실패: '+e);}
+}
+
 function renderAdmSettings(c){
-  c.innerHTML=`<div class="card">
+  c.innerHTML=`<div class="card" style="margin-bottom:10px">
+    <div class="card-head"><div class="card-title">💾 전체 데이터 백업</div></div>
+    <div class="card-body">
+      <div class="text-sm text-gray" style="margin-bottom:8px;line-height:1.6">학생 정보, 공지, 수업, 메시지를 파일 하나로 받아요. 데이터를 읽기만 해서 기존 정보는 바뀌지 않아요.<br><b>학생 비밀번호가 함께 들어 있으니</b> 다른 사람에게 보내지 말고 안전한 곳에 보관해 주세요.</div>
+      <button class="btn btn-outline" onclick="downloadBackup()">💾 백업 받기</button>
+    </div>
+  </div>
+  ${renderAcctCard()}
+  <div class="card" style="margin-top:10px">
     <div class="card-head"><div class="card-title">🔐 관리자 비밀번호 변경</div></div>
     <div class="card-body">
       <div class="form-row"><label class="form-label">현재 비밀번호</label><input type="password" id="cur-apw"></div>
