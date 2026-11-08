@@ -373,7 +373,14 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       resSnap.forEach(d => D.resources.push(d.data()));
     } catch(e) {}
     DB = window.DB;
-    if (isAdm) await cleanupLegacyPasswords();
+    if (isAdm) {
+      await cleanupLegacyPasswords();
+      // 공개 카드가 학생 수보다 적으면 자동으로 맞추기 (학생 화면 명단이 비어 보이는 문제 방지)
+      try {
+        const n = await countPublicCards();
+        if (n < D.students.length) { const m = await syncPublicCards(); console.log('✅ 공개 카드 자동 맞추기:', m); }
+      } catch(e) { console.warn('공개 카드 자동 맞추기 실패:', e); }
+    }
     startMessageSync(acc);
     startResourceSync();
   }
@@ -745,6 +752,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     </div>
   </div>
   <div class="content">
+    <div id="todo-alert-wrap"></div>
     <div id="notice-bar-wrap"></div>
     <div id="events-bar-wrap"></div>
     <div id="resource-board-wrap"></div>
@@ -1571,7 +1579,60 @@ function doLogout(){
   showPage('page-login');
 }
 
+// ── 미입력 알림: 이번 주 체크리스트 · 이번 달 목표/달성률 · 이번 달 인바디 ──
+function localMondayKey(){
+  var n=new Date();var m=new Date(n.getFullYear(),n.getMonth(),n.getDate()-((n.getDay()+6)%7));
+  return m.getFullYear()+'-'+String(m.getMonth()+1).padStart(2,'0')+'-'+String(m.getDate()).padStart(2,'0');
+}
+function missingInputs(s){
+  var n=new Date(),mon=n.getMonth()+1;
+  var ym=n.getFullYear()+'-'+String(mon).padStart(2,'0');
+  var miss=[];
+  // 이번 주: 이번 주 월요일 하루 전부터의 기록이면 작성한 것으로 봄 (기존 주차 키의 시간대 차이 보정)
+  var m=localMondayKey(),d=new Date(m);d.setDate(d.getDate()-1);
+  var from=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  var hasWeek=(s.weeklies||[]).some(function(w){return w.weekKey&&w.weekKey>=from&&(w.items||[]).length;});
+  if(!hasWeek) miss.push({key:'week',label:'이번 주 체크리스트'});
+  var g=(s.monthlyGoals||[]).find(function(x){return x.month===ym;});
+  if(!g||!String(g.goal||'').trim()) miss.push({key:'goal',label:mon+'월 목표'});
+  else if(n.getDate()>=15&&!(g.achievement>0)) miss.push({key:'ach',label:mon+'월 달성률'});
+  var hasIb=(s.inbody||[]).some(function(ib){return String(ib.date||'').slice(0,7)===ym;});
+  if(!hasIb) miss.push({key:'inbody',label:mon+'월 인바디'});
+  return miss;
+}
+var _todoAdminOpen=false;
+function renderTodoAlert(){
+  var w=document.getElementById('todo-alert-wrap');if(!w) return;
+  var box='background:#fff7ed;border:1.5px solid #fdba74;border-radius:14px;padding:12px 14px;margin-bottom:12px';
+  if(!isAdmin){
+    var me=DB.students.find(function(x){return String(x.id)===String(curSid);});
+    if(!me||me._pub||me.inactive||me.onLeave){w.innerHTML='';return;}
+    var miss=missingInputs(me);
+    if(!miss.length){w.innerHTML='';return;}
+    w.innerHTML='<div style="'+box+'">'+
+      '<div style="font-size:14px;font-weight:900;color:#c2410c;margin-bottom:6px">⚠️ 아직 안 적은 게 있어요</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">'+miss.map(function(x){return '<span style="background:#fff;border:1px solid #fdba74;color:#9a3412;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:800">'+x.label+'</span>';}).join('')+'</div>'+
+      '<button onclick="openProfile('+me.id+')" class="btn btn-pink" style="width:100%;padding:10px;font-size:14px">내 페이지에서 적으러 가기 →</button></div>';
+    return;
+  }
+  // 관리자: 재원생 중 미입력 인원
+  var studs=DB.students.filter(function(s){return !s._pub&&!s.inactive&&!s.onLeave;});
+  var groups={};
+  studs.forEach(function(s){missingInputs(s).forEach(function(x){(groups[x.key]=groups[x.key]||{label:x.label,names:[]}).names.push(s);});});
+  var keys=['week','goal','ach','inbody'].filter(function(k){return groups[k];});
+  if(!keys.length){w.innerHTML='';return;}
+  w.innerHTML='<div style="'+box+'">'+
+    '<div onclick="_todoAdminOpen=!_todoAdminOpen;renderTodoAlert()" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">'+
+      '<div><div style="font-size:14px;font-weight:900;color:#c2410c">⚠️ 미입력 학생</div>'+
+      '<div style="font-size:12px;color:#9a3412;margin-top:3px">'+keys.map(function(k){return groups[k].label+' '+groups[k].names.length+'명';}).join(' · ')+'</div></div>'+
+      '<div style="font-size:12px;color:#9a3412;font-weight:800;white-space:nowrap">'+(_todoAdminOpen?'접기 ▴':'명단 ▾')+'</div></div>'+
+    (_todoAdminOpen?keys.map(function(k){return '<div style="margin-top:10px"><div style="font-size:12px;font-weight:800;color:#9a3412;margin-bottom:4px">'+groups[k].label+' ('+groups[k].names.length+')</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:4px">'+groups[k].names.map(function(s){return '<span onclick="openProfile('+s.id+')" style="background:#fff;border:1px solid #fed7aa;border-radius:8px;padding:2px 8px;font-size:12px;cursor:pointer">'+esc(s.name)+'</span>';}).join('')+'</div></div>';}).join(''):'')+
+    '</div>';
+}
+
 function renderMain(){
+  renderTodoAlert();
   // 관리 버튼은 관리자에게만 표시
   document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=isAdmin?'':'none';});
   renderNoticeBar();
