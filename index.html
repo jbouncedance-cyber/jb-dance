@@ -345,7 +345,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
     // 세션 체크 → 로그인 페이지 또는 자동 로그인
     initLoginPage();
-    if(!checkLoginSession()){
+    if (window.NEW_LOGIN) {
+      await window.newLoginStart();
+    } else if(!checkLoginSession()){
       showPage('page-login');
     }
     // 로딩 오버레이 제거
@@ -512,7 +514,26 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     }
     return { ok:true, uid };
   }
-  window.fbAuth = { listAccounts, createAccount, loginIdToEmail };
+  // 새 로그인 (2단계): 기본 앱 인스턴스로 로그인 — 로그아웃 전까지 이 기기에서 유지됨
+  const mainAuth = getAuth(app);
+  async function readAccount(uid){
+    const snap = await getDoc(doc(ACCOUNTS_COL, uid));
+    return snap.exists() ? snap.data() : null;
+  }
+  async function authLogin(loginId, pw){
+    const cred = await signInWithEmailAndPassword(mainAuth, loginIdToEmail(loginId), pw);
+    const acc = await readAccount(cred.user.uid);
+    if(!acc){ try{ await fbSignOut(mainAuth); }catch(_){} const e = new Error('no-account'); e.code = 'no-account'; throw e; }
+    return acc;
+  }
+  async function authCurrent(){
+    await mainAuth.authStateReady();
+    const u = mainAuth.currentUser;
+    if(!u) return null;
+    return await readAccount(u.uid);
+  }
+  async function authLogout(){ try{ await fbSignOut(mainAuth); }catch(_){} }
+  window.fbAuth = { listAccounts, createAccount, loginIdToEmail, login:authLogin, current:authCurrent, logout:authLogout };
   window.fb_loadAll = loadAll;
   window.fb = { saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest, saveResource, deleteResource, uploadPhoto, deletePhoto };
 
@@ -539,7 +560,11 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     <div style="font-size:13px;color:var(--gray);margin-top:6px">입시반 관리 시스템</div>
   </div>
   <div style="width:100%;max-width:340px">
-    <div style="margin-bottom:16px">
+    <div id="login-new-box" style="margin-bottom:16px;display:none">
+      <label style="font-size:13px;font-weight:700;color:var(--gray);display:block;margin-bottom:6px">아이디</label>
+      <input type="text" id="login-id" maxlength="30" placeholder="아이디 입력" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:12px;font-size:15px;font-family:inherit;box-sizing:border-box" onkeydown="if(event.key==='Enter')document.getElementById('login-pw').focus()">
+    </div>
+    <div id="login-old-box" style="margin-bottom:16px">
       <label style="font-size:13px;font-weight:700;color:var(--gray);display:block;margin-bottom:6px">이름 선택</label>
       <select id="login-name-sel" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:12px;font-size:15px;font-family:inherit;background:#fff">
         <option value="">— 이름을 선택하세요 —</option>
@@ -1246,7 +1271,70 @@ function initLoginPage(){
   });
 }
 
+// ── 새 로그인 (2단계 시험: 주소 끝에 ?login=1 을 붙였을 때만 작동) ──
+var NEW_LOGIN=/[?&]login=1(&|$)/.test(location.search);
+window.NEW_LOGIN=NEW_LOGIN;
+var authAccount=null;
+function newLoginUI(){
+  var nb=document.getElementById('login-new-box'),ob=document.getElementById('login-old-box');
+  if(nb) nb.style.display='';
+  if(ob) ob.style.display='none';
+  var pw=document.getElementById('login-pw');
+  if(pw){pw.setAttribute('autocomplete','current-password');pw.placeholder='비밀번호 입력';}
+}
+async function newLoginStart(){
+  newLoginUI();
+  try{
+    var acc=window.fbAuth?await window.fbAuth.current():null;
+    if(acc&&enterWithAccount(acc)) return;
+  }catch(e){console.warn('자동 로그인 확인 실패',e);}
+  showPage('page-login');
+}
+window.newLoginStart=newLoginStart;
+function enterWithAccount(acc){
+  var err=document.getElementById('login-err');
+  if(acc.role==='admin'){
+    authAccount=acc;isAdmin=true;curSid=null;
+    renderMain();showPage('page-main');return true;
+  }
+  if(acc.role==='student'){
+    var s=DB.students.find(function(x){return String(x.id)===String(acc.sid);});
+    if(!s){ if(err) err.textContent='학생 정보를 찾을 수 없어요. 선생님께 문의하세요.'; window.fbAuth.logout(); return false; }
+    if(s.inactive){ if(err) err.textContent='수강이 종료됐습니다. 선생님께 문의하세요.'; window.fbAuth.logout(); return false; }
+    authAccount=acc;isAdmin=false;curSid=s.id;
+    renderMain();showPage('page-main');return true;
+  }
+  if(err) err.textContent='사용할 수 없는 계정이에요.';
+  window.fbAuth.logout();return false;
+}
+var _loginBusy=false;
+async function doLoginNew(){
+  var id=(document.getElementById('login-id').value||'').trim().toLowerCase();
+  var pw=document.getElementById('login-pw').value;
+  var err=document.getElementById('login-err');
+  err.textContent='';
+  if(!id){err.textContent='아이디를 입력해주세요';return;}
+  if(!pw){err.textContent='비밀번호를 입력해주세요';return;}
+  if(!window.fbAuth){err.textContent='로그인 기능을 불러오지 못했어요. 새로고침해 주세요.';return;}
+  if(_loginBusy) return;
+  _loginBusy=true;err.textContent='확인 중…';
+  try{
+    var acc=await window.fbAuth.login(id,pw);
+    err.textContent='';
+    if(enterWithAccount(acc)) document.getElementById('login-pw').value='';
+  }catch(e){
+    var c=e&&e.code||'';
+    if(c==='auth/invalid-credential'||c==='auth/wrong-password'||c==='auth/user-not-found'||c==='auth/invalid-email') err.textContent='아이디 또는 비밀번호가 틀렸어요';
+    else if(c==='no-account') err.textContent='등록되지 않은 계정이에요. 선생님께 문의하세요.';
+    else if(c==='auth/too-many-requests') err.textContent='여러 번 틀려서 잠시 막혔어요. 조금 뒤에 다시 해주세요.';
+    else if(c==='auth/network-request-failed') err.textContent='인터넷 연결을 확인해 주세요';
+    else err.textContent='로그인 실패 ('+c+')';
+  }
+  _loginBusy=false;
+}
+
 function doLogin(){
+  if(NEW_LOGIN){ doLoginNew(); return; }
   var sel=document.getElementById('login-name-sel').value;
   var pw=document.getElementById('login-pw').value;
   var err=document.getElementById('login-err');
@@ -1310,6 +1398,7 @@ function checkLoginSession(){
 
 function doLogout(){
   if(!confirm('로그아웃 하시겠습니까?')) return;
+  if(NEW_LOGIN&&window.fbAuth){ window.fbAuth.logout(); authAccount=null; }
   localStorage.removeItem('jbd_session');
   isAdmin=false;
   curSid=null;
@@ -1917,6 +2006,12 @@ function toggleStudentClasses(cardId){
 // STUDENT LOCK (PIN)
 // ═══════════════════════════════════════════
 function openStudentLock(id){
+  if(NEW_LOGIN){
+    if(isAdmin){ openProfile(id); return; }
+    if(authAccount&&String(authAccount.sid)===String(id)){ openProfile(id); return; }
+    showToast('본인 페이지만 볼 수 있어요');
+    return;
+  }
   curSid=id;const s=DB.students.find(x=>x.id===id);if(!s) return;
   document.getElementById('lock-name').textContent=s.name;
   document.getElementById('lock-avatar').innerHTML=s.photo?`<img src="${s.photo}">`:`${s.name[0]}`;
@@ -2968,7 +3063,7 @@ function delEv(id){if(!confirm('삭제하시겠습니까?')) return;DB.events=DB
 // ═══════════════════════════════════════════
 // ADMIN
 // ═══════════════════════════════════════════
-function goAdmin(){if(isAdmin){showPage('page-admin');return;}document.getElementById('admin-pw-input').value='';document.getElementById('admin-pw-err').textContent='';showPage('page-admin-lock');}
+function goAdmin(){if(isAdmin){showPage('page-admin');return;}if(NEW_LOGIN){showToast('관리자 계정으로 로그인해야 해요');return;}document.getElementById('admin-pw-input').value='';document.getElementById('admin-pw-err').textContent='';showPage('page-admin-lock');}
 function checkAdminPw(){if(document.getElementById('admin-pw-input').value===DB.adminPw){isAdmin=true;showPage('page-admin');renderAdmContent();}else document.getElementById('admin-pw-err').textContent='비밀번호가 틀렸습니다';}
 function adminOut(){ doLogout(); }
 
