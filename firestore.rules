@@ -29,6 +29,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 아이디 → 로그인 이메일 연결표: 로그인 전에도 아이디 하나씩만 조회 가능
+    match /jbdance_login/{id} {
+      allow get: if true;
+      allow list, write: if isAdmin();
+    }
+
     // 공지·행사·수업 목록
     match /jbdance/{docId} {
       allow read: if isAdmin() || activeStudent();

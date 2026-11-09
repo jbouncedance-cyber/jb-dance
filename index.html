@@ -678,10 +678,50 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   }
 
   // 관리자 로그인 상태를 바꾸지 않도록 별도 앱 인스턴스로 계정을 만듦
+  // 아이디 → 로그인용 이메일 연결표 (아이디·비밀번호를 바꾸면 새 이메일로 연결)
+  const LOGIN_COL = collection(db, 'jbdance_login');
+  function uniqueEmail(loginId){ return String(loginId).trim().toLowerCase() + '.' + Date.now().toString(36) + LOGIN_EMAIL_DOMAIN; }
+  async function emailFor(loginId){
+    const id = String(loginId).trim().toLowerCase();
+    try {
+      const snap = await getDoc(doc(LOGIN_COL, id));
+      if (snap.exists() && snap.data().email) return snap.data().email;
+    } catch(e) { /* 규칙 게시 전이면 기본 이메일 사용 */ }
+    return loginIdToEmail(id);
+  }
+  async function newAuthUser(email, pw){
+    if(!_creatorApp) _creatorApp = initializeApp(firebaseConfig, 'account-creator');
+    const cAuth = getAuth(_creatorApp);
+    try {
+      const cred = await createUserWithEmailAndPassword(cAuth, email, pw);
+      return { uid: cred.user.uid };
+    } catch(e) { return { code: (e && e.code) || String(e) }; }
+    finally { try { await fbSignOut(cAuth); } catch(_){} }
+  }
+
+  // 학생 아이디·비밀번호 변경: 새 로그인 계정을 만들고 기존 계정 기록을 지움
+  // (다른 사람의 비밀번호는 앱에서 직접 바꿀 수 없어서 이 방식으로 교체)
+  async function changeStudentLogin(oldAcc, newId, newPw){
+    newId = String(newId).trim().toLowerCase();
+    const email = uniqueEmail(newId);
+    const r = await newAuthUser(email, newPw);
+    if (!r.uid) return { ok:false, code:r.code };
+    try {
+      await setDoc(doc(ACCOUNTS_COL, r.uid), {
+        uid:r.uid, loginId:newId, role:oldAcc.role, sid:oldAcc.sid,
+        createdAt:oldAcc.createdAt || Date.now(), changedAt:Date.now(), pwChanged:true, email
+      });
+      await setDoc(doc(LOGIN_COL, newId), { email, updatedAt:Date.now() });
+      await deleteDoc(doc(ACCOUNTS_COL, oldAcc.uid));
+      if (oldAcc.loginId !== newId) { try { await deleteDoc(doc(LOGIN_COL, oldAcc.loginId)); } catch(_){} }
+    } catch(e) { return { ok:false, code:(e && e.code) === 'permission-denied' ? 'rules-needed' : 'record-failed' }; }
+    return { ok:true, uid:r.uid, loginId:newId };
+  }
+
   async function createAccount(loginId, pw, role, sid){
     if(!_creatorApp) _creatorApp = initializeApp(firebaseConfig, 'account-creator');
     const cAuth = getAuth(_creatorApp);
-    const email = loginIdToEmail(loginId);
+    let email = loginIdToEmail(loginId);
     let uid = null;
     try {
       const cred = await createUserWithEmailAndPassword(cAuth, email, pw);
@@ -694,7 +734,17 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
           uid = cred2.user.uid;
         } catch(e2) {
           try { await fbSignOut(cAuth); } catch(_){}
-          return { ok:false, code:'exists-other-pw' };
+          // 예전에 다른 학생이 쓰던 아이디면 새 이메일로 만들고 연결표에 기록
+          if (role === 'student') {
+            email = uniqueEmail(loginId);
+            const r = await newAuthUser(email, pw);
+            if (!r.uid) return { ok:false, code:r.code };
+            uid = r.uid;
+            try { await setDoc(doc(LOGIN_COL, String(loginId).trim().toLowerCase()), { email, updatedAt:Date.now() }); }
+            catch(e3) { return { ok:false, code:'rules-needed' }; }
+          } else {
+            return { ok:false, code:'exists-other-pw' };
+          }
         }
       } else {
         try { await fbSignOut(cAuth); } catch(_){}
@@ -705,7 +755,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     try {
       await setDoc(doc(ACCOUNTS_COL, uid), {
         uid, loginId:String(loginId).trim().toLowerCase(), role,
-        sid:(sid===undefined||sid===null)?null:sid, createdAt:Date.now()
+        sid:(sid===undefined||sid===null)?null:sid, createdAt:Date.now(), email
       });
     } catch(e) {
       return { ok:false, code:'record-failed' };
@@ -719,7 +769,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     return snap.exists() ? snap.data() : null;
   }
   async function authLogin(loginId, pw){
-    const cred = await signInWithEmailAndPassword(mainAuth, loginIdToEmail(loginId), pw);
+    const cred = await signInWithEmailAndPassword(mainAuth, await emailFor(loginId), pw);
     const acc = await readAccount(cred.user.uid);
     if(!acc){ try{ await fbSignOut(mainAuth); }catch(_){} const e = new Error('no-account'); e.code = 'no-account'; throw e; }
     return acc;
@@ -738,7 +788,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     await reauthenticateWithCredential(u, EmailAuthProvider.credential(u.email, curPw));
     await updatePassword(u, newPw);
   }
-  window.fbAuth = { listAccounts, createAccount, loginIdToEmail, login:authLogin, current:authCurrent, logout:authLogout, changePassword:authChangePassword };
+  window.fbAuth = { listAccounts, createAccount, loginIdToEmail, login:authLogin, current:authCurrent, logout:authLogout, changePassword:authChangePassword, changeStudentLogin };
   window.fb_loadAll = loadAll;
   window.fb = { syncPublicCards, countPublicCards, saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest, saveResource, deleteResource, uploadPhoto, deletePhoto };
 
@@ -4544,7 +4594,7 @@ function acctRows(){
   return studs.map(function(s){
     var acc=bySid[String(s.id)];
     var pw=acctBirth6(s.birth);
-    if(acc) return {s:s,status:'done',id:acc.loginId,pw:pw};
+    if(acc) return {s:s,status:'done',id:acc.loginId,pw:acc.pwChanged?'':pw,pwChanged:!!acc.pwChanged,acc:acc};
     if(!pw) return {s:s,status:'nobirth',id:'',pw:''};
     var id=acctState.idEdits[s.id]!==undefined?acctState.idEdits[s.id]:acctBaseId(s);
     if(acctState.idEdits[s.id]===undefined){
@@ -4564,6 +4614,43 @@ async function acctLoad(){
   catch(e){acctState.error='계정 목록을 불러오지 못했어요 ('+(e&&e.code||e)+')';}
   acctState.loading=false;
   if(isAdmin&&admTab_==='settings') renderAdmContent();
+}
+function openEditLogin(sid){
+  var r=acctRows().find(function(x){return x.s.id===sid;});if(!r||!r.acc) return;
+  var b6=acctBirth6(r.s.birth);
+  var ov=document.createElement('div');ov.className='modal-overlay active';ov.id='modal-edit-login';
+  ov.onclick=function(e){if(e.target===ov) ov.remove();};
+  ov.innerHTML='<div class="modal"><div class="modal-head"><div class="modal-title">🔑 '+esc(r.s.name)+' 로그인 수정</div><button class="close-btn" onclick="document.getElementById(\'modal-edit-login\').remove()">✕</button></div>'+
+    '<div class="modal-body">'+
+    '<div class="form-row"><label class="form-label">아이디 (영문 소문자·숫자 3~20자)</label><input type="text" id="el-id" value="'+esc(r.id)+'" autocapitalize="off" spellcheck="false"></div>'+
+    '<div class="form-row"><label class="form-label">비밀번호 (6자 이상)</label><input type="text" id="el-pw" value="'+(r.pwChanged?'':esc(b6))+'" placeholder="새 비밀번호" autocapitalize="off" spellcheck="false">'+
+    (b6?'<button onclick="document.getElementById(\'el-pw\').value=\''+b6+'\'" style="margin-top:6px;border:1px solid var(--border);background:#fff;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit">생년월일('+b6+')로 초기화</button>':'')+'</div>'+
+    '<div class="text-sm text-gray" style="line-height:1.6">'+(r.pwChanged?'비밀번호는 앱에 저장되지 않아서 지금 비밀번호를 보여줄 수 없어요. 그대로 쓰려면 같은 비밀번호를 다시 입력해 주세요.<br>':'')+'저장하면 이 학생 휴대폰은 로그아웃되고, 새 아이디·비밀번호로 다시 로그인해야 해요.</div>'+
+    '<div id="el-err" style="color:var(--pink);font-size:13px;margin-top:8px;min-height:18px"></div>'+
+    '<button class="btn btn-pink" style="width:100%;margin-top:6px" id="el-save" onclick="saveEditLogin('+sid+')">저장</button></div></div>';
+  document.body.appendChild(ov);
+}
+async function saveEditLogin(sid){
+  var r=acctRows().find(function(x){return x.s.id===sid;});if(!r||!r.acc) return;
+  var id=(document.getElementById('el-id').value||'').trim().toLowerCase();
+  var pw=document.getElementById('el-pw').value||'';
+  var err=document.getElementById('el-err');err.textContent='';
+  if(!/^[a-z0-9]{3,20}$/.test(id)){err.textContent='아이디는 영문 소문자·숫자 3~20자로 적어주세요';return;}
+  if(acctState.accounts.some(function(a){return a.loginId===id&&String(a.sid)!==String(sid);})){err.textContent='다른 학생이 쓰는 아이디예요';return;}
+  if(id==='admin'){err.textContent='admin은 쓸 수 없어요';return;}
+  if(pw.length<6){err.textContent='비밀번호는 6자 이상이어야 해요';return;}
+  var btn=document.getElementById('el-save');btn.disabled=true;btn.textContent='저장 중…';
+  var res=await window.fbAuth.changeStudentLogin(r.acc,id,pw);
+  if(!res.ok){
+    btn.disabled=false;btn.textContent='저장';
+    err.textContent=res.code==='rules-needed'?'Firebase 규칙을 새로 게시해야 해요 (안내 참고)':acctErrText(res.code);
+    return;
+  }
+  acctState.accounts=acctState.accounts.filter(function(a){return a.uid!==r.acc.uid;});
+  acctState.accounts.push({uid:res.uid,loginId:res.loginId,role:'student',sid:r.acc.sid,pwChanged:true});
+  document.getElementById('modal-edit-login').remove();
+  renderAdmContent();
+  alert('✅ '+r.s.name+' 로그인 정보를 바꿨어요\n\n아이디: '+res.loginId+'\n비밀번호: '+pw+'\n\n학생에게 알려주세요. 비밀번호는 앱에 저장되지 않아요.');
 }
 function acctErrText(code){
   if(code==='exists-other-pw') return '같은 아이디가 이미 있어요';
@@ -4650,13 +4737,13 @@ function renderAcctCard(){
         return `<tr style="border-top:1px solid var(--border)">
           <td style="padding:7px 8px;font-weight:700;white-space:nowrap">${esc(r.s.name)}</td>
           <td style="padding:7px 8px">${idCell}</td>
-          <td style="padding:7px 8px">${esc(r.pw||'—')}</td>
-          <td style="padding:7px 8px;white-space:nowrap">${badge(r)}</td></tr>`;
+          <td style="padding:7px 8px;white-space:nowrap">${r.pwChanged?'<span class="text-gray">변경됨</span>':esc(r.pw||'—')}</td>
+          <td style="padding:7px 8px;white-space:nowrap">${badge(r)}${r.status==='done'?` <button onclick="openEditLogin(${r.s.id})" ${dis} style="border:1px solid var(--border);background:#fff;border-radius:7px;padding:3px 8px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;color:var(--pink)">수정</button>`:''}</td></tr>`;
       }).join('')}</tbody>
     </table></div>
     ${cnt.nobirth?`<div class="text-sm text-gray" style="margin-top:6px">생년월일이 없는 학생은 학생 정보에 생년월일을 넣으면 "대기"로 바뀌어요.</div>`:''}
     ${cnt.bad?`<div class="text-sm" style="margin-top:6px;color:var(--pink)">"아이디 확인" 학생은 영문 소문자·숫자 3~20자로, 다른 학생과 겹치지 않게 고쳐 주세요.</div>`:''}
-    <div class="text-sm text-gray" style="margin-top:6px">아이디 칸은 눌러서 고칠 수 있어요. 퇴원 처리된 학생은 목록에 나오지 않아요.</div>
+    <div class="text-sm text-gray" style="margin-top:6px">만든 계정은 <b>수정</b>으로 아이디·비밀번호를 바꿀 수 있어요. 바꾼 비밀번호는 앱에 저장되지 않아 "변경됨"으로 표시돼요. 퇴원 처리된 학생은 목록에 나오지 않아요.</div>
     <button class="btn btn-pink" style="margin-top:10px;width:100%" onclick="acctCreateStudents()" ${dis||(cnt.wait?'':'disabled')}>${acctState.busy?'만드는 중…':'학생 계정 '+cnt.wait+'개 만들기'}</button>
   </div></div>`;
 }
