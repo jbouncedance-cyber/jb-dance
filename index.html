@@ -2599,11 +2599,12 @@ function renderProfile(s){
       <div style="font-size:12px;color:var(--gray);margin-top:3px">${s.birth}</div>
       <div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:8px;align-items:center">
         ${gradeOf(s)?`<span class="badge" style="background:#eef2ff;color:#4338ca">${gradeOf(s)}</span>`:''}
-        ${isAdmin?`<select onchange="setGradeOverride(${s.id},this.value)" title="학년 직접 지정" style="font-size:11px;border:1px solid var(--border);border-radius:20px;padding:2px 6px;font-family:inherit;color:var(--gray);background:#fff"><option value="">학년 자동</option>${GRADE_OPTS.map(g=>`<option value="${g}"${s.gradeOverride===g?' selected':''}>${g}</option>`).join('')}</select>`:''}
+        ${viewIsAdmin()?`<select onchange="setGradeOverride(${s.id},this.value)" title="학년 직접 지정" style="width:auto;display:inline-block;-webkit-appearance:auto;appearance:auto;font-size:11px;border:1px solid var(--border);border-radius:20px;padding:2px 6px;font-family:inherit;color:var(--gray);background:#fff;vertical-align:middle"><option value="">학년 자동</option>${GRADE_OPTS.map(g=>`<option value="${g}"${s.gradeOverride===g?' selected':''}>${g}</option>`).join('')}</select>`:''}
         ${s.major?`<span class="badge pink">${esc(s.major)}</span>`:`<span class="badge gray">전공없음</span>`}
         <button onclick="openMajorModal(${s.id})" style="background:none;border:1px solid var(--border);border-radius:20px;padding:2px 9px;font-size:11px;color:var(--gray);cursor:pointer;font-family:inherit">수정</button>
         ${lastIb?`<span class="badge green">📊 인바디 ${lastIb.score}점</span>`:''}
       </div>
+      ${viewIsAdmin()&&!s.inactive?`<button onclick="viewAsStudent(${s.id})" style="margin-top:12px;background:#1d1b20;color:#fff;border:none;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">👁 이 학생 화면으로 보기</button>`:''}
     </div>
   </div>
 
