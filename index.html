@@ -187,7 +187,9 @@ textarea{resize:vertical;min-height:80px}
 .hm-av{width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:19px;overflow:hidden;flex-shrink:0}
 .hm-av img{width:100%;height:100%;object-fit:cover}
 .hm-nm{font-size:18px;font-weight:900}.hm-sub{font-size:12px;opacity:.85;margin-top:2px}
-.hm-dday{margin-left:auto;text-align:right;max-width:45%}.hm-dday b{display:block;font-size:24px;font-weight:900;letter-spacing:-1px;line-height:1.1}.hm-dday small{font-size:11px;opacity:.85;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hm-dday{margin-left:auto;text-align:right;max-width:50%;min-width:0}
+.hm-dday2{display:flex;justify-content:flex-end;align-items:baseline;gap:5px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.25);font-size:11px;opacity:.9}
+.hm-dday2 span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.hm-dday2 em{font-style:normal;font-weight:900;font-size:14px;white-space:nowrap}.hm-dday b{display:block;font-size:24px;font-weight:900;letter-spacing:-1px;line-height:1.1}.hm-dday small{font-size:11px;opacity:.85;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hm-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:14px}
 .hm-st{background:rgba(255,255,255,.13);border-radius:13px;padding:9px 10px}.hm-st b{font-size:18px;font-weight:900;display:block}.hm-st small{font-size:11px;opacity:.85}
 .hm-sec{display:flex;justify-content:space-between;align-items:baseline;margin:16px 2px 8px}.hm-sec h3{font-size:15px;font-weight:900}.hm-sec button{background:none;border:none;font-size:12px;color:var(--gray);font-weight:700;cursor:pointer;font-family:inherit}
@@ -1757,9 +1759,13 @@ function renderMeCard(){
   var wkPct=wk?Math.round(wk.items.reduce(function(a,i){return a+(i.achievement||0);},0)/wk.items.length)+'%':'—';
   var ib=(me.inbody||[]).length?me.inbody[me.inbody.length-1]:null;
   var t=todayStr();
-  var next=visibleEvents().filter(function(e){return e.date>=t;}).sort(function(a,b){return a.date.localeCompare(b.date);})[0];
+  var nexts=visibleEvents().filter(function(e){return e.date>=t;}).sort(function(a,b){return a.date.localeCompare(b.date);}).slice(0,2);
   var dd='';
-  if(next){var diff=Math.round((new Date(next.date)-new Date(t))/86400000);dd='<div class="hm-dday"><small>'+esc(next.name)+'</small><b>'+(diff===0?'D-DAY':'D-'+diff)+'</b></div>';}
+  if(nexts.length){
+    var dlabel=function(e){var diff=Math.round((new Date(e.date)-new Date(t))/86400000);return diff===0?'D-DAY':'D-'+diff;};
+    dd='<div class="hm-dday"><small>'+esc(nexts[0].name)+'</small><b>'+dlabel(nexts[0])+'</b>'+
+      (nexts[1]?'<div class="hm-dday2"><span>'+esc(nexts[1].name)+'</span><em>'+dlabel(nexts[1])+'</em></div>':'')+'</div>';
+  }
   var gr=gradeOf(me);
   w.innerHTML='<div class="hm-me" onclick="openMyPage()">'+
     '<div class="hm-me-top"><div class="hm-av">'+(me.photo?'<img src="'+me.photo+'">':esc(me.name[0]))+'</div>'+
