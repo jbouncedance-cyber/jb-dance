@@ -806,6 +806,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     </div>
   </div>
   <div class="content">
+    <div id="preview-bar-wrap"></div>
     <div id="me-card-wrap"></div>
     <div id="todo-alert-wrap"></div>
     <div id="notice-bar-wrap"></div>
@@ -1441,7 +1442,7 @@ function renderEventsBar(){
     var isUrgent=diff<=3;
     html+='<div onclick="showPage(&quot;page-schedule&quot;)" style="background:var(--white);border:1px solid var(--border);border-left:3px solid '+(isUrgent?'var(--red)':'var(--blue)')+';border-radius:10px;padding:9px 13px;margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:10px">';
     html+='<div style="text-align:center;min-width:36px"><div style="font-size:10px;font-weight:800;color:'+(isUrgent?'var(--red)':'var(--blue)')+'">'+diffTxt+'</div></div>';
-    html+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800">'+esc(ev.name)+(isAdmin?evTargetTag(ev):'')+'</div>';
+    html+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800">'+esc(ev.name)+(viewIsAdmin()?evTargetTag(ev):'')+'</div>';
     html+='<div style="font-size:11px;color:var(--gray);margin-top:1px">'+ev.date+(ev.memo?' · '+esc(ev.memo):'')+'</div></div>';
     html+='<div style="color:var(--gray2);font-size:18px">›</div></div>';
   });
@@ -1652,13 +1653,32 @@ function gradeOf(s){
   return '';
 }
 window.gradeOf=gradeOf;
+// ── 관리자의 "학생 화면으로 보기": 화면만 그 학생 기준으로 보여줌 (권한은 그대로 관리자) ──
+var previewSid=null;
+function viewIsAdmin(){ return isAdmin&&!previewSid; }
+function viewSid(){ return previewSid||curSid; }
+function viewAsStudent(sid){
+  previewSid=sid;asMenuSid=null;
+  showPage('page-main');renderMain();window.scrollTo(0,0);
+}
+function exitViewAs(){
+  previewSid=null;
+  renderMain();showPage('page-admin');
+}
+function renderPreviewBar(){
+  var w=document.getElementById('preview-bar-wrap');if(!w) return;
+  var s=previewSid&&DB.students.find(function(x){return x.id===previewSid;});
+  w.innerHTML=s?'<div style="display:flex;align-items:center;gap:8px;background:#1d1b20;color:#fff;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:13px;font-weight:700">'+
+    '<span>👁 <b>'+esc(s.name)+'</b> 학생 화면으로 보는 중</span>'+
+    '<button onclick="exitViewAs()" style="margin-left:auto;background:var(--pink);color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">나가기</button></div>':'';
+}
 function myGrade(){
-  if(isAdmin) return null;
-  var me=DB.students.find(function(x){return String(x.id)===String(curSid);});
+  if(viewIsAdmin()) return null;
+  var me=DB.students.find(function(x){return String(x.id)===String(viewSid());});
   return me?gradeOf(me):null;
 }
 function evForMe(ev){
-  if(isAdmin) return true;
+  if(viewIsAdmin()) return true;
   var t=ev.targets||[];
   if(!t.length) return true;
   var g=myGrade();
@@ -1670,13 +1690,13 @@ function evTargetTag(ev){
   return t.length?'<span class="hm-tag grade">'+t.map(esc).join('·')+'</span>':'';
 }
 function todayStr(){var n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}
-function openMyPage(){ if(curSid) openStudentLock(curSid); }
+function openMyPage(){ var id=viewSid(); if(id) openStudentLock(id); }
 
 // 학생 첫 화면 맨 위 "내 카드"
 function renderMeCard(){
   var w=document.getElementById('me-card-wrap');if(!w) return;
-  if(isAdmin){w.innerHTML='';return;}
-  var me=DB.students.find(function(x){return String(x.id)===String(curSid);});
+  if(viewIsAdmin()){w.innerHTML='';return;}
+  var me=DB.students.find(function(x){return String(x.id)===String(viewSid());});
   if(!me||me._pub){w.innerHTML='';return;}
   var n=new Date(),ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
   var g=(me.monthlyGoals||[]).find(function(x){return x.month===ym;});
@@ -1741,8 +1761,8 @@ var _todoAdminOpen=false;
 function renderTodoAlert(){
   var w=document.getElementById('todo-alert-wrap');if(!w) return;
   var box='background:#fff7ed;border:1.5px solid #fdba74;border-radius:14px;padding:12px 14px;margin-bottom:12px';
-  if(!isAdmin){
-    var me=DB.students.find(function(x){return String(x.id)===String(curSid);});
+  if(!viewIsAdmin()){
+    var me=DB.students.find(function(x){return String(x.id)===String(viewSid());});
     if(!me||me._pub||me.inactive||me.onLeave){w.innerHTML='';return;}
     var miss=missingInputs(me);
     if(!miss.length){w.innerHTML='';return;}
@@ -1769,10 +1789,11 @@ function renderTodoAlert(){
 }
 
 function renderMain(){
+  renderPreviewBar();
   renderTodoAlert();
-  // 관리 버튼은 관리자에게만 표시
-  document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=isAdmin?'':'none';});
-  document.querySelectorAll('.student-only').forEach(function(el){el.style.display=isAdmin?'none':'';});
+  // 관리 버튼은 관리자에게만 표시 (학생 화면 보기 중에는 학생과 똑같이)
+  document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=viewIsAdmin()?'':'none';});
+  document.querySelectorAll('.student-only').forEach(function(el){el.style.display=viewIsAdmin()?'none':'';});
   renderMeCard();
   renderNoticeBar();
   renderEventsBar();
@@ -2388,13 +2409,13 @@ function renderStudentGrid(){
   if(f.startsWith('g:')) list=list.filter(s=>gradeOf(s)===f.slice(2));
   if(f.startsWith('m:')) list=list.filter(s=>(s.major||'').trim().replace(/'/g,'')===f.slice(2));
   // 내 카드는 맨 앞
-  list.sort((a,b)=>(String(b.id)===String(curSid)&&!isAdmin)-(String(a.id)===String(curSid)&&!isAdmin));
+  list.sort((a,b)=>(String(b.id)===String(viewSid())&&!viewIsAdmin())-(String(a.id)===String(viewSid())&&!viewIsAdmin()));
   if(!list.length){g.innerHTML='<div class="empty-msg" style="grid-column:1/-1">조건에 맞는 학생이 없어요</div>';return;}
   g.innerHTML=list.map(s=>{
     const ib=s.inbody&&s.inbody.length?s.inbody[s.inbody.length-1]:null;
     const gr=gradeOf(s);
-    const mine=!isAdmin&&String(s.id)===String(curSid);
-    const hasReq=isAdmin&&DB.requests.some(r=>r.studentId===s.id&&!r.read);
+    const mine=!viewIsAdmin()&&String(s.id)===String(viewSid());
+    const hasReq=viewIsAdmin()&&DB.requests.some(r=>r.studentId===s.id&&!r.read);
     return `<div class="hm-sc${mine?' mine':''}" onclick="openStudentLock(${s.id})">
       <div class="av">${s.photo?`<img src="${s.photo}">`:esc(s.name[0])}</div>
       <div style="min-width:0"><div class="n">${esc(s.name)}${s.onLeave?'<span class="hm-tag leave">휴원</span>':''}${mine?'<span class="hm-tag grade">나</span>':''}${hasReq?'<span class="alert-dot"></span>':''}</div>
@@ -2415,6 +2436,7 @@ function toggleStudentClasses(cardId){
 // ═══════════════════════════════════════════
 function openStudentLock(id){
   if(NEW_LOGIN){
+    if(previewSid){ if(String(id)===String(previewSid)) openProfile(id); else openFriendCard(id); return; }
     if(isAdmin){ openProfile(id); return; }
     if(authAccount&&String(authAccount.sid)===String(id)){ openProfile(id); return; }
     openFriendCard(id);
@@ -3438,7 +3460,7 @@ function renderSchedule(){
         <div style="font-size:19px;font-weight:900;color:${dim?'var(--gray)':'var(--pink)'};line-height:1">${parseInt(d)}</div>
         <div style="font-size:10px;color:${dim?'var(--gray)':'var(--pink)'};font-weight:700">${parseInt(mo)}월</div>
       </div>
-      <div style="flex:1"><div style="font-size:14px;font-weight:800;color:${dim?'var(--gray)':'var(--black)'}">${esc(ev.name)}${isAdmin?evTargetTag(ev):''}</div>${ev.memo?`<div style="font-size:12px;color:var(--gray);margin-top:2px">${esc(ev.memo)}</div>`:''}</div>
+      <div style="flex:1"><div style="font-size:14px;font-weight:800;color:${dim?'var(--gray)':'var(--black)'}">${esc(ev.name)}${viewIsAdmin()?evTargetTag(ev):''}</div>${ev.memo?`<div style="font-size:12px;color:var(--gray);margin-top:2px">${esc(ev.memo)}</div>`:''}</div>
       ${isAdmin?`<div style="display:flex;gap:3px"><button class="edt-btn" onclick="openEditEv('${ev.id}')">수정</button><button class="del-btn" onclick="delEv('${ev.id}')">삭제</button></div>`:''}
     </div>`;
   }
@@ -3480,7 +3502,7 @@ function delEv(id){if(!confirm('삭제하시겠습니까?')) return;DB.events=DB
 // ═══════════════════════════════════════════
 // ADMIN
 // ═══════════════════════════════════════════
-function goAdmin(){if(isAdmin){showPage('page-admin');return;}if(NEW_LOGIN){showToast('관리자 계정으로 로그인해야 해요');return;}document.getElementById('admin-pw-input').value='';document.getElementById('admin-pw-err').textContent='';showPage('page-admin-lock');}
+function goAdmin(){if(isAdmin){previewSid=null;renderMain();showPage('page-admin');return;}if(NEW_LOGIN){showToast('관리자 계정으로 로그인해야 해요');return;}document.getElementById('admin-pw-input').value='';document.getElementById('admin-pw-err').textContent='';showPage('page-admin-lock');}
 function checkAdminPw(){if(!DB.adminPw) return;if(document.getElementById('admin-pw-input').value===DB.adminPw){isAdmin=true;showPage('page-admin');renderAdmContent();}else document.getElementById('admin-pw-err').textContent='비밀번호가 틀렸습니다';}
 function adminOut(){ doLogout(); }
 
@@ -3557,6 +3579,7 @@ function renderAdmStudents(c){
     html+='</div>';
     if(asMenuSid===s.id){
       html+='<div class="as-menu" onclick="event.stopPropagation()">';
+      if(!s.inactive) html+='<button onclick="viewAsStudent('+s.id+')">👁 학생 화면으로 보기</button>';
       html+='<button onclick="asMenuSid=null;openTeacherMsg('+s.id+')">💌 메시지 보내기</button>';
       if(myClasses.length) html+='<button onclick="asMenuSid=null;renderAsList();toggleAdmCls('+s.id+')">📚 수업 보기 ('+realCount+')</button>';
       html+='<label>상태 <select onchange="asMenuSid=null;setStudentStatus('+s.id+',this.value,this)">'+
