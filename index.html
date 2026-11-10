@@ -1826,6 +1826,7 @@ function renderPracticeCard(s){
     PR_KINDS.slice().reverse().map(function(K){var h=Math.round(x[K.k]/mx*62);return h?'<div style="height:'+h+'px;background:'+K.bar+'"></div>':'';}).join('')+
     '</div><div style="font-size:10.5px;color:'+(d===t?'var(--pink)':'var(--gray)')+';font-weight:'+(d===t?900:600)+'">'+'월화수목금토일'[i]+'</div></div>';}).join('');
   return '<div class="card" style="margin-bottom:12px"><div class="card-head"><div class="card-title">⏱ 연습 기록</div><span style="font-size:11.5px;color:var(--gray)">드래그해서 시간 맞추기</span></div><div class="card-body" style="padding-top:4px">'+
+    '<div style="background:#fdf2f8;border-radius:11px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.6;color:#831843">💗 연습 기록은 <b>검사용이 아니라 나를 위한 기록</b>이에요.<br>적게 한 날도 괜찮아요. <b>솔직하게, 매일 꾸준히</b> 남겨주세요.</div>'+
     '<div class="hm-chips" style="margin:0">'+days.map(function(d){var has=prTotal(prOf(s,d));return '<button class="hm-chip'+(d===sel?' on':'')+'" style="'+(d===sel?'background:var(--pink);border-color:var(--pink)':'')+'" onclick="_prDate=\''+d+'\';_prDraft=null;renderPracticeWrap()">'+prLabel(d)+(has?' ✓':'')+'</button>';}).join('')+'</div>'+
     sliders+
     '<button class="btn btn-pink" style="width:100%;margin-top:14px" onclick="prSave('+s.id+')">'+prLabel(sel)+' 연습 저장</button>'+
