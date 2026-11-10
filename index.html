@@ -6,6 +6,14 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js" crossorigin>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -253,9 +261,6 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     getDoc, getDocs, setDoc, deleteDoc, onSnapshot, query, where
   } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
   import {
-    getStorage, ref, uploadString, getDownloadURL, deleteObject
-  } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
-  import {
     getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as fbSignOut,
     updatePassword, EmailAuthProvider, reauthenticateWithCredential
   } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
@@ -271,7 +276,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
-  const storage = getStorage(app);
+  // 사진 저장소(Storage)는 사진을 올리거나 지울 때만 불러옴 (첫 화면 로딩을 줄이기 위해)
 
   const CONFIG_REF  = doc(db, 'jbdance', 'config');
   const STUDENTS_COL = collection(db, 'jbdance_students');
@@ -387,7 +392,16 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     window.__authAccount = acc;
     const isAdm = acc.role === 'admin';
     D.students = []; D.messages = []; D.requests = []; D.resources = [];
-    const cSnap = await getDoc(CONFIG_REF);
+    // 필요한 정보를 한꺼번에 요청 (하나씩 기다리지 않아서 휴대폰에서 훨씬 빨라짐)
+    const safe = p => p.catch(e => { console.warn('불러오기 실패:', e); return null; });
+    const [cSnap, mainSnap, ownDoc, rSnap, mSnap, resSnap] = await Promise.all([
+      getDoc(CONFIG_REF),
+      isAdm ? getDocs(STUDENTS_COL) : getDocs(PUBLIC_COL),
+      isAdm ? Promise.resolve(null) : getStudent(acc.sid),
+      isAdm ? getDocs(REQUESTS_COL) : getDocs(query(REQUESTS_COL, where('studentId', '==', acc.sid))),
+      safe(getDocs(MESSAGES_COL)),
+      safe(getDocs(RESOURCES_COL))
+    ]);
     if (cSnap.exists()) {
       const c = cSnap.data();
       D.adminPw   = '';
@@ -399,13 +413,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       if (c.trainingSlots  && c.trainingSlots.length)  D.trainingSlots  = c.trainingSlots;
     }
     if (isAdm) {
-      const sSnap = await getDocs(STUDENTS_COL);
-      sSnap.forEach(d => D.students.push(d.data()));
-      const rSnap = await getDocs(REQUESTS_COL);
-      rSnap.forEach(d => D.requests.push(d.data()));
+      mainSnap.forEach(d => D.students.push(d.data()));
     } else {
-      const pSnap = await getDocs(PUBLIC_COL);
-      pSnap.forEach(d => {
+      mainSnap.forEach(d => {
         const p = d.data();
         if (String(p.id) === String(acc.sid)) return;
         D.students.push({
@@ -415,27 +425,23 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
           inbody: p.lastInbody ? [p.lastInbody] : [], goals: {}, grade: p.grade || '', _pub: true
         });
       });
-      const own = await getStudent(acc.sid);
-      if (own) D.students.push(own);
-      const rSnap = await getDocs(query(REQUESTS_COL, where('studentId', '==', acc.sid)));
-      rSnap.forEach(d => D.requests.push(d.data()));
+      if (ownDoc) D.students.push(ownDoc);
     }
+    rSnap.forEach(d => D.requests.push(d.data()));
     D.students.sort((a,b) => (a.name||'').localeCompare(b.name||'','ko'));
-    const mSnap = await getDocs(MESSAGES_COL);
-    mSnap.forEach(d => D.messages.push(d.data()));
+    if (mSnap) mSnap.forEach(d => D.messages.push(d.data()));
     D.messages.sort((a,b) => a.id.localeCompare(b.id));
-    try {
-      const resSnap = await getDocs(RESOURCES_COL);
-      resSnap.forEach(d => D.resources.push(d.data()));
-    } catch(e) {}
+    if (resSnap) resSnap.forEach(d => D.resources.push(d.data()));
     DB = window.DB;
     if (isAdm) {
-      await cleanupLegacyPasswords();
-      // 공개 카드가 학생 수보다 적으면 자동으로 맞추기 (학생 화면 명단이 비어 보이는 문제 방지)
-      try {
-        const c = await countPublicCards(true);
-        if (c.n < D.students.length || c.stale > 0) { const m = await syncPublicCards(); console.log('✅ 공개 카드 자동 맞추기:', m); }
-      } catch(e) { console.warn('공개 카드 자동 맞추기 실패:', e); }
+      // 관리자 정리 작업은 화면을 먼저 보여준 뒤 뒤에서 진행
+      setTimeout(async () => {
+        await cleanupLegacyPasswords();
+        try {
+          const c = await countPublicCards(true);
+          if (c.n < D.students.length || c.stale > 0) { const m = await syncPublicCards(); console.log('✅ 공개 카드 자동 맞추기:', m); }
+        } catch(e) { console.warn('공개 카드 자동 맞추기 실패:', e); }
+      }, 1500);
     }
     startMessageSync(acc);
     startResourceSync();
@@ -782,7 +788,26 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     if(!u) return null;
     return await readAccount(u.uid);
   }
-  async function authLogout(){ try{ await fbSignOut(mainAuth); }catch(_){} }
+  // 빠른 시작: 이 기기에 저장해 둔 계정 종류(uid·역할·학생번호)로 데이터를 먼저 요청하고, 계정 확인은 동시에 진행
+  async function authCurrentFast(){
+    await mainAuth.authStateReady();
+    const u = mainAuth.currentUser;
+    if(!u) return { acc:null };
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem('jbd_acct') || 'null'); } catch(_){}
+    if (cached && cached.uid === u.uid) {
+      const [acc, loaded] = await Promise.all([
+        readAccount(u.uid),
+        loadForAccount(cached).then(() => true).catch(e => { console.warn('빠른 불러오기 실패', e); return false; })
+      ]);
+      if (acc && loaded && acc.role === cached.role && String(acc.sid) === String(cached.sid)) return { acc, loaded:true };
+      return { acc, loaded:false };
+    }
+    return { acc: await readAccount(u.uid), loaded:false };
+  }
+  function rememberAccount(acc){ try { localStorage.setItem('jbd_acct', JSON.stringify({ uid:acc.uid, role:acc.role, sid:acc.sid })); } catch(_){} }
+  function forgetAccount(){ try { localStorage.removeItem('jbd_acct'); } catch(_){} }
+  async function authLogout(){ forgetAccount(); try{ await fbSignOut(mainAuth); }catch(_){} }
   // 로그인한 본인 비밀번호 변경 (현재 비밀번호로 한 번 더 확인)
   async function authChangePassword(curPw, newPw){
     const u = mainAuth.currentUser;
@@ -790,7 +815,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     await reauthenticateWithCredential(u, EmailAuthProvider.credential(u.email, curPw));
     await updatePassword(u, newPw);
   }
-  window.fbAuth = { listAccounts, createAccount, loginIdToEmail, login:authLogin, current:authCurrent, logout:authLogout, changePassword:authChangePassword, changeStudentLogin };
+  window.fbAuth = { listAccounts, createAccount, loginIdToEmail, login:authLogin, current:authCurrent, currentFast:authCurrentFast, remember:rememberAccount, logout:authLogout, changePassword:authChangePassword, changeStudentLogin };
   window.fb_loadAll = loadAll;
   window.fb = { syncPublicCards, countPublicCards, saveStudent, deleteStudent, saveConfig, saveMessage, deleteMessage, saveRequest, deleteRequest, saveResource, deleteResource, uploadPhoto, deletePhoto };
 
@@ -1546,9 +1571,11 @@ function newLoginUI(){
 async function newLoginStart(){
   newLoginUI();
   try{
-    var acc=window.fbAuth?await window.fbAuth.current():null;
+    var r=window.fbAuth?await window.fbAuth.currentFast():{acc:null};
+    var acc=r.acc;
     if(acc){
-      await window.fb_loadFor(acc);
+      if(!r.loaded) await window.fb_loadFor(acc);
+      window.fbAuth.remember(acc);
       if(enterWithAccount(acc)) return;
     }
   }catch(e){
@@ -1599,6 +1626,7 @@ async function doLoginNew(){
   try{
     var acc=await window.fbAuth.login(id,pw);
     await window.fb_loadFor(acc);
+    window.fbAuth.remember(acc);
     err.textContent='';
     if(enterWithAccount(acc)) document.getElementById('login-pw').value='';
   }catch(e){
@@ -2554,7 +2582,7 @@ function renderStudentGrid(){
     const mine=!viewIsAdmin()&&String(s.id)===String(viewSid());
     const hasReq=viewIsAdmin()&&DB.requests.some(r=>r.studentId===s.id&&!r.read);
     return `<div class="hm-sc${mine?' mine':''}" onclick="openStudentLock(${s.id})">
-      <div class="av">${s.photo?`<img src="${s.photo}">`:esc(s.name[0])}</div>
+      <div class="av">${s.photo?`<img src="${s.photo}" loading="lazy" decoding="async">`:esc(s.name[0])}</div>
       <div style="min-width:0"><div class="n">${esc(s.name)}${s.onLeave?'<span class="hm-tag leave">휴원</span>':''}${mine?'<span class="hm-tag grade">나</span>':''}${hasReq?'<span class="alert-dot"></span>':''}</div>
       <div class="m">${esc(s.major||'전공없음')}${gr?' · '+gr:''}${ib?` · <b>${ib.score}점</b>`:''}</div></div></div>`;
   }).join('');
