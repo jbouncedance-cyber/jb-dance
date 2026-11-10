@@ -861,6 +861,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     <div id="preview-bar-wrap"></div>
     <div id="me-card-wrap"></div>
     <div id="todo-alert-wrap"></div>
+    <div id="practice-wrap"></div>
     <div id="notice-bar-wrap"></div>
     <div id="events-bar-wrap"></div>
     <div id="resource-board-wrap"></div>
@@ -1792,6 +1793,82 @@ function openFriendCard(id){
   document.body.appendChild(ov);
 }
 
+// ── 연습 기록: 학생이 날마다 댄스·기본기·개인운동 시간을 드래그로 기록 (students.practice = {날짜:{d,b,w}}) ──
+var PR_MAX=360,PR_STEP=10,_prDate=null,_prDraft=null,_prAdminOpen=false;
+var PR_KINDS=[{k:'d',icon:'💃',l:'댄스 연습',c:'#D4006A',bar:'#f472b6'},{k:'b',icon:'🔁',l:'기본기 연습',c:'#7c3aed',bar:'#a78bfa'},{k:'w',icon:'💪',l:'개인 운동',c:'#0F9D76',bar:'#34d399'}];
+function prAddDays(d,n){var x=new Date(d+'T00:00:00');x.setDate(x.getDate()+n);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');}
+function prOf(s,d){var x=(s&&s.practice||{})[d];return {d:+(x&&x.d)||0,b:+(x&&x.b)||0,w:+(x&&x.w)||0};}
+function prTotal(x){return (x.d||0)+(x.b||0)+(x.w||0);}
+function prMin(m){m=Math.round(+m||0);var h=Math.floor(m/60),r=m%60;return m?((h?h+'시간':'')+(r?(h?' ':'')+r+'분':'')):'0분';}
+function prSum(s,from,to){var t={d:0,b:0,w:0};Object.keys(s&&s.practice||{}).forEach(function(k){if(k>=from&&k<=to){var x=prOf(s,k);t.d+=x.d;t.b+=x.b;t.w+=x.w;}});return t;}
+function prWeek(){var a=localMondayKey();return [a,prAddDays(a,6)];}
+function prMonth(){var t=todayStr();return [t.slice(0,7)+'-01',t.slice(0,7)+'-31'];}
+function prLabel(d){var t=todayStr();if(d===t)return '오늘';if(d===prAddDays(t,-1))return '어제';return (+d.slice(5,7))+'/'+(+d.slice(8))+'('+'일월화수목금토'[new Date(d+'T00:00:00').getDay()]+')';}
+function renderPracticeWrap(){
+  var w=document.getElementById('practice-wrap');if(!w) return;
+  if(viewIsAdmin()){w.innerHTML=renderPracticeAdmin();return;}
+  var s=DB.students.find(function(x){return String(x.id)===String(viewSid());});
+  if(!s||s._pub){w.innerHTML='';return;}
+  w.innerHTML=renderPracticeCard(s);
+}
+function renderPracticeCard(s){
+  var t=todayStr();if(!_prDate)_prDate=t;var sel=_prDate;
+  var cur=_prDraft&&_prDraft.sid===s.id&&_prDraft.date===sel?_prDraft:prOf(s,sel);
+  var days=[0,1,2,3,4,5,6].map(function(i){return prAddDays(t,-i);});
+  var wk=prWeek(),mo=prMonth(),ws=prSum(s,wk[0],wk[1]),ms=prSum(s,mo[0],mo[1]);
+  var wdays=[0,1,2,3,4,5,6].map(function(i){return prAddDays(wk[0],i);});
+  var mx=Math.max(60,Math.max.apply(null,wdays.map(function(d){return prTotal(prOf(s,d));})));
+  var ticks='<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--gray2)"><span>0</span><span>1시간</span><span>2시간</span><span>3시간</span><span>4시간</span><span>5시간</span><span>6시간</span></div>';
+  var sliders=PR_KINDS.map(function(K){return '<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:14px;font-weight:800">'+K.icon+' '+K.l+'</span><span id="pr-'+K.k+'-v" style="font-size:18px;font-weight:900;color:'+K.c+'">'+prMin(cur[K.k])+'</span></div>'+
+    '<input type="range" min="0" max="'+PR_MAX+'" step="'+PR_STEP+'" value="'+cur[K.k]+'" oninput="prDrag('+s.id+',\''+K.k+'\',this.value)" style="width:100%;margin:8px 0 0;padding:0;border:0;background:none;-webkit-appearance:auto;appearance:auto;accent-color:'+K.c+';height:28px">'+ticks+'</div>';}).join('');
+  var sumBox=function(title,x){return '<div style="flex:1;background:var(--light,#f6f4f7);border-radius:11px;padding:10px"><div style="font-size:11px;color:var(--gray);font-weight:700">'+title+'</div>'+PR_KINDS.map(function(K){return '<div style="font-size:12.5px;font-weight:800;margin-top:2px">'+K.icon+' '+prMin(x[K.k])+'</div>';}).join('')+'</div>';};
+  var bars=wdays.map(function(d,i){var x=prOf(s,d);return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:100%;max-width:26px;display:flex;flex-direction:column;justify-content:flex-end;height:62px;border-radius:4px;overflow:hidden">'+
+    PR_KINDS.slice().reverse().map(function(K){var h=Math.round(x[K.k]/mx*62);return h?'<div style="height:'+h+'px;background:'+K.bar+'"></div>':'';}).join('')+
+    '</div><div style="font-size:10.5px;color:'+(d===t?'var(--pink)':'var(--gray)')+';font-weight:'+(d===t?900:600)+'">'+'월화수목금토일'[i]+'</div></div>';}).join('');
+  return '<div class="card" style="margin-bottom:12px"><div class="card-head"><div class="card-title">⏱ 연습 기록</div><span style="font-size:11.5px;color:var(--gray)">드래그해서 시간 맞추기</span></div><div class="card-body" style="padding-top:4px">'+
+    '<div class="hm-chips" style="margin:0">'+days.map(function(d){var has=prTotal(prOf(s,d));return '<button class="hm-chip'+(d===sel?' on':'')+'" style="'+(d===sel?'background:var(--pink);border-color:var(--pink)':'')+'" onclick="_prDate=\''+d+'\';_prDraft=null;renderPracticeWrap()">'+prLabel(d)+(has?' ✓':'')+'</button>';}).join('')+'</div>'+
+    sliders+
+    '<button class="btn btn-pink" style="width:100%;margin-top:14px" onclick="prSave('+s.id+')">'+prLabel(sel)+' 연습 저장</button>'+
+    '<div style="display:flex;gap:8px;margin-top:14px">'+sumBox('이번 주',ws)+sumBox((+t.slice(5,7))+'월',ms)+'</div>'+
+    '<div style="display:flex;gap:6px;align-items:flex-end;margin-top:14px;padding:0 2px">'+bars+'</div>'+
+    '<div style="font-size:10.5px;color:var(--gray);text-align:center;margin-top:5px">'+PR_KINDS.map(function(K){return '<span style="color:'+K.bar+'">■</span> '+K.l.replace(' 연습','');}).join(' &nbsp;')+' · 이번 주 (월~일)</div>'+
+    '</div></div>';
+}
+function prDrag(sid,k,v){
+  var s=DB.students.find(function(x){return x.id===sid;});if(!s) return;
+  if(!_prDraft||_prDraft.sid!==sid||_prDraft.date!==_prDate){var o=prOf(s,_prDate);_prDraft={sid:sid,date:_prDate,d:o.d,b:o.b,w:o.w};}
+  _prDraft[k]=+v;var el=document.getElementById('pr-'+k+'-v');if(el) el.textContent=prMin(v);
+}
+async function prSave(sid){
+  var s=DB.students.find(function(x){return x.id===sid;});if(!s) return;
+  var d=_prDate||todayStr();
+  var x=_prDraft&&_prDraft.sid===sid&&_prDraft.date===d?_prDraft:prOf(s,d);
+  if(!s.practice) s.practice={};
+  if(!prTotal(x)) delete s.practice[d]; else s.practice[d]={d:x.d,b:x.b,w:x.w,ts:Date.now()};
+  save();await saveStudent(s);_prDraft=null;
+  showToast('✅ '+prLabel(d)+' 연습 저장 · 총 '+prMin(prTotal(x)),3000);
+  renderMain();
+}
+// 관리자 홈: 학생별 이번 주·이번 달 연습 시간
+function renderPracticeAdmin(){
+  var studs=DB.students.filter(function(s){return !s._pub&&!s.inactive&&!s.onLeave;});
+  if(!studs.length) return '';
+  var wk=prWeek(),mo=prMonth();
+  var rows=studs.map(function(s){var keys=Object.keys(s.practice||{}).sort();return {s:s,w:prSum(s,wk[0],wk[1]),m:prSum(s,mo[0],mo[1]),last:keys[keys.length-1]||''};})
+    .sort(function(a,b){return prTotal(b.w)-prTotal(a.w)||a.s.name.localeCompare(b.s.name,'ko');});
+  var none=rows.filter(function(r){return !prTotal(r.w);}).length;
+  var line=function(x){return PR_KINDS.map(function(K){return K.icon+' '+prMin(x[K.k]);}).join('<br>');};
+  return '<div class="card" style="margin-bottom:12px"><div class="card-head" style="cursor:pointer" onclick="_prAdminOpen=!_prAdminOpen;renderPracticeWrap()"><div class="card-title">⏱ 연습 기록</div>'+
+    '<span style="font-size:12px;font-weight:800;color:'+(none?'#B91C1C':'#15803D')+'">이번 주 기록 없음 '+none+'명 '+(_prAdminOpen?'▴':'▾')+'</span></div>'+
+    (_prAdminOpen?'<div style="display:flex;padding:7px 13px;font-size:11px;font-weight:800;color:var(--gray);border-bottom:1px solid var(--border)"><div style="flex:1">이름</div><div style="flex:1.4">이번 주</div><div style="flex:1.4">'+(+mo[0].slice(5,7))+'월</div><div style="flex:.7;text-align:right">마지막</div></div>'+
+    rows.map(function(r){var wt=prTotal(r.w),mt=prTotal(r.m);return '<div style="display:flex;align-items:center;padding:8px 13px;border-top:1px solid var(--border);font-size:12px">'+
+      '<div style="flex:1;font-weight:800;cursor:pointer" onclick="openProfile('+r.s.id+')">'+esc(r.s.name)+'</div>'+
+      '<div style="flex:1.4;line-height:1.5;'+(wt?'':'color:#B91C1C;font-weight:700')+'">'+(wt?line(r.w):'기록 없음')+'</div>'+
+      '<div style="flex:1.4;line-height:1.5;color:var(--gray)">'+(mt?line(r.m):'-')+'</div>'+
+      '<div style="flex:.7;text-align:right;font-size:11px;color:var(--gray)">'+(r.last?(+r.last.slice(5,7))+'/'+(+r.last.slice(8)):'-')+'</div></div>';}).join(''):'')+
+    '</div>';
+}
+
 // ── 미입력 알림: 이번 주 체크리스트 · 이번 달 목표/달성률 · 이번 달 인바디 ──
 function localMondayKey(){
   var n=new Date();var m=new Date(n.getFullYear(),n.getMonth(),n.getDate()-((n.getDay()+6)%7));
@@ -1811,6 +1888,7 @@ function missingInputs(s){
   else if(n.getDate()>=15&&!(g.achievement>0)) miss.push({key:'ach',label:mon+'월 달성률'});
   var hasIb=(s.inbody||[]).some(function(ib){return String(ib.date||'').slice(0,7)===ym;});
   if(!hasIb) miss.push({key:'inbody',label:mon+'월 인바디'});
+  if(!viewIsAdmin()&&!prTotal(prOf(s,todayStr()))) miss.push({key:'practice',label:'오늘 연습'});
   return miss;
 }
 var _todoAdminOpen=false;
@@ -1825,7 +1903,8 @@ function renderTodoAlert(){
     w.innerHTML='<div style="'+box+'">'+
       '<div style="font-size:14px;font-weight:900;color:#c2410c;margin-bottom:6px">⚠️ 아직 안 적은 게 있어요</div>'+
       '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">'+miss.map(function(x){return '<span style="background:#fff;border:1px solid #fdba74;color:#9a3412;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:800">'+x.label+'</span>';}).join('')+'</div>'+
-      '<button onclick="openProfile('+me.id+')" class="btn btn-pink" style="width:100%;padding:10px;font-size:14px">내 페이지에서 적으러 가기 →</button></div>';
+      (miss.some(function(x){return x.key!=='practice';})?'<button onclick="openProfile('+me.id+')" class="btn btn-pink" style="width:100%;padding:10px;font-size:14px">내 페이지에서 적으러 가기 →</button>':'')+
+      (miss.some(function(x){return x.key==='practice';})?'<button onclick="document.getElementById(\'practice-wrap\').scrollIntoView({behavior:\'smooth\',block:\'start\'})" class="btn btn-outline" style="width:100%;padding:10px;font-size:14px;margin-top:6px">⏱ 아래에서 오늘 연습 기록하기 ↓</button>':'')+'</div>';
     return;
   }
   // 관리자: 재원생 중 미입력 인원
@@ -1847,6 +1926,7 @@ function renderTodoAlert(){
 function renderMain(){
   renderPreviewBar();
   renderTodoAlert();
+  renderPracticeWrap();
   // 관리 버튼은 관리자에게만 표시 (학생 화면 보기 중에는 학생과 똑같이)
   document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=viewIsAdmin()?'':'none';});
   document.querySelectorAll('.student-only').forEach(function(el){el.style.display=viewIsAdmin()?'none':'';});
